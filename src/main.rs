@@ -1,4 +1,4 @@
-use axum::{Router, routing::get};
+use axum::{Router, http::StatusCode, response::IntoResponse, routing::get};
 use tokio::net::TcpListener;
 use tower_livereload::LiveReloadLayer;
 use tracing::info;
@@ -9,6 +9,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(hello_world))
+        .fallback(not_found)
         .layer(LiveReloadLayer::new());
 
     info!("Starting server on http://localhost:8000");
@@ -22,4 +23,8 @@ async fn main() {
 
 pub async fn hello_world() -> &'static str {
     "Hello, World!"
+}
+
+async fn not_found(uri: axum::http::Uri) -> impl IntoResponse {
+    (StatusCode::NOT_FOUND, format!("No route {}", uri))
 }
