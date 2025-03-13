@@ -1,5 +1,6 @@
 use axum::{Router, http::StatusCode, response::IntoResponse, routing::get};
 use tokio::net::TcpListener;
+use tower_http::trace::TraceLayer;
 use tower_livereload::LiveReloadLayer;
 use tracing::info;
 
@@ -10,6 +11,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(hello_world))
         .fallback(not_found)
+        .layer(TraceLayer::new_for_http())
         .layer(LiveReloadLayer::new());
 
     info!("Starting server on http://localhost:8000");
