@@ -7,6 +7,8 @@ use tower_livereload::LiveReloadLayer;
 use tracing::info;
 
 mod handlers;
+mod models;
+mod schema;
 
 #[derive(Debug)]
 pub struct Config {
@@ -40,7 +42,7 @@ async fn main() {
     let pool = Pool::builder(manager).build().unwrap();
 
     let app = Router::new()
-        .route("/", get(handlers::hello_world))
+        .route("/vehicles", get(handlers::list_vehicles))
         .fallback(handlers::not_found)
         .layer(TraceLayer::new_for_http())
         .layer(LiveReloadLayer::new())
