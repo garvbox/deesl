@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en-IE">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vehicle List</title>
+  </head>
+  <body>
+    {% for v in vehicles %}
+      <p>Make: {{v.make}}, Model: {{v.model}}, Reg: {{v.registration}}</p>
+    {% endfor %}
+  </body>
+</html>
