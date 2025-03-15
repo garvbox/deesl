@@ -1,4 +1,5 @@
-use axum::{Router, http::StatusCode, response::IntoResponse, routing::get};
+use axum::{Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
+use deadpool_diesel::postgres::{Manager, Pool};
 use std::env;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
@@ -9,6 +10,7 @@ use tracing::info;
 pub struct Config {
     port: usize,
     host: String,
+    database_url: String,
 }
 
 impl Config {
@@ -19,6 +21,8 @@ impl Config {
                 .parse()
                 .unwrap(),
             host: env::var("HOST").unwrap_or("localhost".to_string()),
+            database_url: env::var("DATABASE_URL")
+                .unwrap_or("postgres://postgres:postgres@localhost/deesl".to_string()),
         }
     }
 }
@@ -27,14 +31,18 @@ impl Config {
 async fn main() {
     tracing_subscriber::fmt::init();
     let _ = dotenvy::dotenv();
+    let config = Config::new();
+
+    // set up connection pool
+    let manager = Manager::new(&config.database_url, deadpool_diesel::Runtime::Tokio1);
+    let pool = Pool::builder(manager).build().unwrap();
 
     let app = Router::new()
         .route("/", get(hello_world))
         .fallback(not_found)
         .layer(TraceLayer::new_for_http())
-        .layer(LiveReloadLayer::new());
-
-    let config = Config::new();
+        .layer(LiveReloadLayer::new())
+        .with_state(pool);
 
     let bind_address = format!("{}:{}", config.host, config.port);
     info!("Starting server on http://{bind_address}");
@@ -46,8 +54,9 @@ async fn main() {
         .expect("Failed to start axum server");
 }
 
-pub async fn hello_world() -> &'static str {
-    "Hello, World!"
+async fn hello_world(State(pool): State<deadpool_diesel::postgres::Pool>) -> String {
+    let pool_size = pool.status().max_size;
+    format!("Hello, World! - Pool size: {pool_size}")
 }
 
 async fn not_found(uri: axum::http::Uri) -> impl IntoResponse {

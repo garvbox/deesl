@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 askama = "0.12.1"
 axum = { version = "0.8.1", features = ["json", "tokio"] }
+deadpool-diesel = { version = "0.6.1", features = ["postgres"] }
+diesel = { version = "2.2.8", features = ["postgres"] }
 dotenvy = "0.15.7"
 rstest = "0.25.0"
 serde = { version = "1.0.219", features = ["derive"] }
