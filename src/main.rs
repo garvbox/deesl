@@ -1,10 +1,12 @@
-use axum::{Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
+use axum::{Router, routing::get};
 use deadpool_diesel::postgres::{Manager, Pool};
 use std::env;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tower_livereload::LiveReloadLayer;
 use tracing::info;
+
+mod handlers;
 
 #[derive(Debug)]
 pub struct Config {
@@ -38,8 +40,8 @@ async fn main() {
     let pool = Pool::builder(manager).build().unwrap();
 
     let app = Router::new()
-        .route("/", get(hello_world))
-        .fallback(not_found)
+        .route("/", get(handlers::hello_world))
+        .fallback(handlers::not_found)
         .layer(TraceLayer::new_for_http())
         .layer(LiveReloadLayer::new())
         .with_state(pool);
@@ -52,13 +54,4 @@ async fn main() {
     axum::serve(listener, app)
         .await
         .expect("Failed to start axum server");
-}
-
-async fn hello_world(State(pool): State<deadpool_diesel::postgres::Pool>) -> String {
-    let pool_size = pool.status().max_size;
-    format!("Hello, World! - Pool size: {pool_size}")
-}
-
-async fn not_found(uri: axum::http::Uri) -> impl IntoResponse {
-    (StatusCode::NOT_FOUND, format!("No route {}", uri))
 }
