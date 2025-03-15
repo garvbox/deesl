@@ -26,6 +26,7 @@ impl Config {
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
+    let _ = dotenvy::dotenv();
 
     let app = Router::new()
         .route("/", get(hello_world))
