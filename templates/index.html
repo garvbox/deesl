@@ -5,22 +5,37 @@
     <title>Vehicle List</title>
   </head>
   <body>
+    <h2>Vehicle List</h2>
+    <table>
+      <tr>
+        <th>Make</th>
+        <th>Model</th>
+        <th>Reg</th>
+        <th>Action</th>
+      </tr>
     {% for v in vehicles %}
-      <p>
-        Make: {{v.make}}, Model: {{v.model}}, Reg: {{v.registration}}
-        <form method="post" action="/vehicles/{{v.id}}">
-          <input type="hidden" name="action" value="delete">
-          <input type="submit" value="Delete">
-        </form>
-      </p>
+      <tr>
+        <td>{{v.make}}</td>
+        <td>{{v.model}}</td>
+        <td>{{v.registration}}</td>
+        <td>
+          <form method="post" action="/vehicles/{{v.id}}">
+            <input type="hidden" name="action" value="delete">
+            <input type="submit" value="Delete">
+          </form>
+        </td>
+      </tr>
     {% endfor %}
+    </table>
+
+    <h2>Updates</h2>
     <form method="POST">Add New:<br>
-      <label for="make">Make:</label><br>
+      <label for="make">Make:</label>
       <input type="text" id="make" name="make"><br>
-      <label for="model">Model:</label><br>
-      <input type="text" id="model" name="model">
-      <label for="model">Reg:</label><br>
-      <input type="text" id="registration" name="registration">
+      <label for="model">Model:</label>
+      <input type="text" id="model" name="model"><br>
+      <label for="model">Reg:</label>
+      <input type="text" id="registration" name="registration"><br>
       <input type="submit" value="Submit">
     </form>
   </body>
