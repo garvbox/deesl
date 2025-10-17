@@ -1,7 +1,7 @@
 use askama::Template;
 use axum::{
     Form,
-    extract::{self, State},
+    extract::{self, Path, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect},
 };
@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 use crate::{
     models::{self, NewVehicle},
-    schema::{self, vehicles},
+    schema,
 };
 
 pub async fn not_found(uri: axum::http::Uri) -> impl IntoResponse {
@@ -47,13 +47,38 @@ pub async fn add_new_vehicle(
     let conn = pool.get().await.map_err(internal_error)?;
     conn.interact(|conn| {
         payload
-            .insert_into(vehicles::table)
+            .insert_into(schema::vehicles::table)
             .returning(models::Vehicle::as_returning())
             .get_result(conn)
     })
     .await
     .map_err(internal_error)?
     .map_err(internal_error)?;
+
+    Ok(Redirect::to("/vehicles"))
+}
+
+#[derive(serde::Deserialize)]
+pub struct UpdateVehicle {
+    pub action: String,
+}
+
+pub async fn update_vehicle(
+    State(pool): State<Pool>,
+    Path(vehicle_id): Path<i32>,
+    Form(payload): Form<UpdateVehicle>,
+) -> Result<Redirect, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+
+    if payload.action == "delete".to_string() {
+        conn.interact(move |conn| {
+            diesel::delete(schema::vehicles::table.filter(schema::vehicles::id.eq(&vehicle_id)))
+                .execute(conn)
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(internal_error)?;
+    }
 
     Ok(Redirect::to("/vehicles"))
 }

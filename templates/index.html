@@ -6,7 +6,13 @@
   </head>
   <body>
     {% for v in vehicles %}
-      <p>Make: {{v.make}}, Model: {{v.model}}, Reg: {{v.registration}}</p>
+      <p>
+        Make: {{v.make}}, Model: {{v.model}}, Reg: {{v.registration}}
+        <form method="post" action="/vehicles/{{v.id}}">
+          <input type="hidden" name="action" value="delete">
+          <input type="submit" value="Delete">
+        </form>
+      </p>
     {% endfor %}
     <form method="POST">Add New:<br>
       <label for="make">Make:</label><br>

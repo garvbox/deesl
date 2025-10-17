@@ -1,4 +1,7 @@
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 use deadpool_diesel::postgres::{Manager, Pool};
 use std::env;
 use tokio::net::TcpListener;
@@ -46,6 +49,7 @@ async fn main() {
             "/vehicles",
             get(handlers::list_vehicles).post(handlers::add_new_vehicle),
         )
+        .route("/vehicles/{vehicle_id}", post(handlers::update_vehicle))
         .fallback(handlers::not_found)
         .layer(TraceLayer::new_for_http())
         .layer(LiveReloadLayer::new())
