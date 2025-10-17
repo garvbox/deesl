@@ -1,13 +1,18 @@
 use askama::Template;
 use axum::{
-    extract::State,
+    Form,
+    extract::{self, State},
     http::StatusCode,
-    response::{Html, IntoResponse},
+    response::{Html, IntoResponse, Redirect},
 };
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
+use serde::Deserialize;
 
-use crate::{models, schema};
+use crate::{
+    models::{self, NewVehicle},
+    schema::{self, vehicles},
+};
 
 pub async fn not_found(uri: axum::http::Uri) -> impl IntoResponse {
     (StatusCode::NOT_FOUND, format!("No route {}", uri))
@@ -33,6 +38,24 @@ pub async fn list_vehicles(State(pool): State<Pool>) -> Result<Html<String>, (St
 
     let template = IndexTemplate { vehicles: &res };
     Ok(Html(template.render().unwrap()))
+}
+
+pub async fn add_new_vehicle(
+    State(pool): State<Pool>,
+    Form(payload): Form<NewVehicle>,
+) -> Result<Redirect, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let res = conn
+        .interact(|conn| {
+            payload
+                .insert_into(vehicles::table)
+                .returning(models::Vehicle::as_returning())
+                .get_result(conn)
+        })
+        .await
+        .map_err(internal_error)?;
+
+    Ok(Redirect::to("/vehicles"))
 }
 
 /// Utility function for mapping any error into a `500 Internal Server Error`

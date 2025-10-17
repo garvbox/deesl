@@ -11,3 +11,12 @@ pub struct Vehicle {
     pub registration: String,
     pub created: NaiveDateTime,
 }
+
+#[derive(Insertable, serde::Deserialize)]
+#[diesel(table_name = crate::schema::vehicles)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewVehicle {
+    pub make: String,
+    pub model: String,
+    pub registration: String,
+}

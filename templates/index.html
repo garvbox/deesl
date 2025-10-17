@@ -8,5 +8,14 @@
     {% for v in vehicles %}
       <p>Make: {{v.make}}, Model: {{v.model}}, Reg: {{v.registration}}</p>
     {% endfor %}
+    <form method="POST">Add New:<br>
+      <label for="make">Make:</label><br>
+      <input type="text" id="make" name="make"><br>
+      <label for="model">Model:</label><br>
+      <input type="text" id="model" name="model">
+      <label for="model">Reg:</label><br>
+      <input type="text" id="registration" name="registration">
+      <input type="submit" value="Submit">
+    </form>
   </body>
 </html>
