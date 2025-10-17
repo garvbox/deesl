@@ -45,15 +45,15 @@ pub async fn add_new_vehicle(
     Form(payload): Form<NewVehicle>,
 ) -> Result<Redirect, (StatusCode, String)> {
     let conn = pool.get().await.map_err(internal_error)?;
-    let res = conn
-        .interact(|conn| {
-            payload
-                .insert_into(vehicles::table)
-                .returning(models::Vehicle::as_returning())
-                .get_result(conn)
-        })
-        .await
-        .map_err(internal_error)?;
+    conn.interact(|conn| {
+        payload
+            .insert_into(vehicles::table)
+            .returning(models::Vehicle::as_returning())
+            .get_result(conn)
+    })
+    .await
+    .map_err(internal_error)?
+    .map_err(internal_error)?;
 
     Ok(Redirect::to("/vehicles"))
 }
