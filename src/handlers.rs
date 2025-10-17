@@ -1,13 +1,12 @@
 use askama::Template;
 use axum::{
     Form,
-    extract::{self, Path, State},
+    extract::{Path, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect},
 };
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
-use serde::Deserialize;
 
 use crate::{
     models::{self, NewVehicle},
