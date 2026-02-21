@@ -10,6 +10,7 @@ use tower_livereload::LiveReloadLayer;
 use tracing::info;
 
 mod auth;
+mod auth_handlers;
 mod handlers;
 mod models;
 mod schema;
@@ -46,6 +47,7 @@ async fn main() {
     let pool = Pool::builder(manager).build().unwrap();
 
     let app = Router::new()
+        .merge(auth_handlers::router())
         .route(
             "/vehicles",
             get(handlers::list_vehicles).post(handlers::add_new_vehicle),
