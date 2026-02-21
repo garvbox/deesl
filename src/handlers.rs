@@ -69,7 +69,7 @@ pub async fn update_vehicle(
 ) -> Result<Redirect, (StatusCode, String)> {
     let conn = pool.get().await.map_err(internal_error)?;
 
-    if payload.action == "delete".to_string() {
+    if payload.action == "delete" {
         conn.interact(move |conn| {
             diesel::delete(schema::vehicles::table.filter(schema::vehicles::id.eq(&vehicle_id)))
                 .execute(conn)

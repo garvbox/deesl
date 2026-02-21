@@ -1,12 +1,12 @@
 use axum::{
-    routing::{get, post},
     Router,
+    routing::{get, post},
 };
 use deadpool_diesel::postgres::{Manager, Pool};
 use std::env;
 use tokio::net::TcpListener;
-use tower_http::trace::TraceLayer;
 use tower_http::services::ServeDir;
+use tower_http::trace::TraceLayer;
 use tower_livereload::LiveReloadLayer;
 use tracing::info;
 use utoipa::OpenApi;

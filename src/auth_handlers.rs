@@ -1,10 +1,4 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::post,
-    Json, Router,
-};
+use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::post};
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
 use serde::Deserialize;
@@ -40,7 +34,10 @@ pub async fn register(
     let conn = pool.get().await.map_err(internal_error)?;
 
     let password_hash = bcrypt::hash(&payload.password, 10).map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to hash password: {}", e))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to hash password: {}", e),
+        )
     })?;
 
     let email = payload.email.clone();
@@ -56,12 +53,20 @@ pub async fn register(
         })
         .await
         .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", e)))?;
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Database error: {}", e),
+            )
+        })?;
 
     let config = AuthConfig::new();
-    let token = config
-        .create_token(result.id, &result.email)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create token: {}", e)))?;
+    let token = config.create_token(result.id, &result.email).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to create token: {}", e),
+        )
+    })?;
 
     Ok(Json(AuthResponse {
         token,
@@ -91,20 +96,34 @@ pub async fn login(
         })
         .await
         .map_err(internal_error)?
-        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid email or password".to_string()))?;
+        .map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                "Invalid email or password".to_string(),
+            )
+        })?;
 
     let valid = bcrypt::verify(&payload.password, &user.password_hash).map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to verify password: {}", e))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to verify password: {}", e),
+        )
     })?;
 
     if !valid {
-        return Err((StatusCode::UNAUTHORIZED, "Invalid email or password".to_string()));
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "Invalid email or password".to_string(),
+        ));
     }
 
     let config = AuthConfig::new();
-    let token = config
-        .create_token(user.id, &user.email)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create token: {}", e)))?;
+    let token = config.create_token(user.id, &user.email).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to create token: {}", e),
+        )
+    })?;
 
     Ok(Json(AuthResponse {
         token,
