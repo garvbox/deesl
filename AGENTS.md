@@ -4,10 +4,11 @@ This document provides guidelines for agentic coding agents operating in this re
 
 ## Project Overview
 
-`deesl` is a Rust web application using:
-- **Web Framework**: Axum with Tower
+`deesl` is a Rust web application with a Vue.js frontend:
+- **Backend**: Axum with Tower, Diesel (PostgreSQL), Tokio
+- **Frontend**: Vue 3 + Vite
 - **Database**: Diesel (PostgreSQL) with deadpool for connection pooling
-- **Templating**: Askama
+- **Templating**: Askama (for server-rendered pages)
 - **Async Runtime**: Tokio
 - **Testing**: rstest
 
@@ -15,11 +16,17 @@ This document provides guidelines for agentic coding agents operating in this re
 
 ### Development
 ```bash
-# Run server with auto-reload and trace logging
+# Run backend server with auto-reload and trace logging
 just develop
 
 # Or manually:
 RUST_LOG=deesl=trace,tower_http=debug cargo watch -x run
+
+# Run Vue dev server (port 5173, proxies /api to backend)
+just dev-frontend
+
+# Build Vue frontend for production (outputs to src/pkg/)
+just build-frontend
 ```
 
 ### Build
@@ -146,6 +153,14 @@ diesel print-schema > src/schema.rs
 - Use descriptive test names: `should_return_vehicles_when_database_has_data()`
 - Include doc tests for public APIs
 
+### Frontend (Vue.js)
+- Use Vue 3 Composition API with `<script setup>` syntax
+- Place reusable logic in `composables/` directory (e.g., `useAuth.js`)
+- Place API calls in `services/` directory
+- Use `ref()` for reactive state, `computed()` for derived state
+- Components are in `components/` directory
+- Styles are scoped within each `.vue` file's `<style>` block
+
 ## Common Patterns
 
 ### Handler Pattern
@@ -178,7 +193,7 @@ impl Config {
 
 ## Dependencies
 
-Key dependencies (see `Cargo.toml`):
+### Backend (see `Cargo.toml`)
 - `axum` - HTTP framework
 - `diesel` / `deadpool-diesel` - Database ORM and connection pool
 - `tokio` - Async runtime
@@ -186,3 +201,8 @@ Key dependencies (see `Cargo.toml`):
 - `serde` - Serialization
 - `tracing` / `tracing-subscriber` - Logging
 - `rstest` - Testing framework
+- `tower-http` - CORS, static file serving, tracing
+
+### Frontend (see `frontend/package.json`)
+- `vue` - UI framework
+- `vite` - Build tool and dev server
