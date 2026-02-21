@@ -3,6 +3,9 @@ name = "deesl"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+members = ["frontend"]
+
 [dependencies]
 askama = "0.12.1"
 axum = { version = "0.8.1", features = ["json", "tokio", "form"] }
