@@ -16,6 +16,7 @@ mod auth_handlers;
 mod handlers;
 mod models;
 mod schema;
+mod vehicle_fuel_handlers;
 
 async fn serve_openapi() -> axum::response::Json<String> {
     axum::response::Json(api_doc::ApiDoc::openapi().to_json().unwrap())
@@ -55,6 +56,7 @@ async fn main() {
     let app = Router::new()
         .route("/api/openapi.json", get(serve_openapi))
         .merge(auth_handlers::router())
+        .merge(vehicle_fuel_handlers::router())
         .route(
             "/vehicles",
             get(handlers::list_vehicles).post(handlers::add_new_vehicle),
