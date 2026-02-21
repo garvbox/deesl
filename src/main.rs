@@ -1,6 +1,6 @@
 use axum::{
-    Router,
     routing::{get, post},
+    Router,
 };
 use deadpool_diesel::postgres::{Manager, Pool};
 use std::env;
@@ -8,12 +8,18 @@ use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tower_livereload::LiveReloadLayer;
 use tracing::info;
+use utoipa::OpenApi;
 
+mod api_doc;
 mod auth;
 mod auth_handlers;
 mod handlers;
 mod models;
 mod schema;
+
+async fn serve_openapi() -> axum::response::Json<String> {
+    axum::response::Json(api_doc::ApiDoc::openapi().to_json().unwrap())
+}
 
 #[derive(Debug)]
 pub struct Config {
@@ -47,6 +53,7 @@ async fn main() {
     let pool = Pool::builder(manager).build().unwrap();
 
     let app = Router::new()
+        .route("/api/openapi.json", get(serve_openapi))
         .merge(auth_handlers::router())
         .route(
             "/vehicles",
