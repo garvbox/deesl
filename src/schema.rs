@@ -6,8 +6,8 @@ diesel::table! {
         vehicle_id -> Int4,
         station_id -> Nullable<Int4>,
         mileage_km -> Int4,
-        litres -> Numeric,
-        cost -> Numeric,
+        litres -> Float8,
+        cost -> Float8,
         filled_at -> Timestamp,
         created_at -> Timestamp,
     }

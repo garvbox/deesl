@@ -9,6 +9,7 @@ use tower_http::trace::TraceLayer;
 use tower_livereload::LiveReloadLayer;
 use tracing::info;
 
+mod auth;
 mod handlers;
 mod models;
 mod schema;
