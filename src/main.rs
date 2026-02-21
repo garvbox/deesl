@@ -6,6 +6,7 @@ use deadpool_diesel::postgres::{Manager, Pool};
 use std::env;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
+use tower_http::services::ServeDir;
 use tower_livereload::LiveReloadLayer;
 use tracing::info;
 use utoipa::OpenApi;
@@ -20,6 +21,10 @@ mod vehicle_fuel_handlers;
 
 async fn serve_openapi() -> axum::response::Json<String> {
     axum::response::Json(api_doc::ApiDoc::openapi().to_json().unwrap())
+}
+
+async fn serve_index() -> impl axum::response::IntoResponse {
+    axum::response::Html(include_str!("pkg/index.html"))
 }
 
 #[derive(Debug)]
@@ -54,6 +59,7 @@ async fn main() {
     let pool = Pool::builder(manager).build().unwrap();
 
     let app = Router::new()
+        .nest_service("/static", ServeDir::new("src/pkg"))
         .route("/api/openapi.json", get(serve_openapi))
         .merge(auth_handlers::router())
         .merge(vehicle_fuel_handlers::router())
@@ -62,7 +68,7 @@ async fn main() {
             get(handlers::list_vehicles).post(handlers::add_new_vehicle),
         )
         .route("/vehicles/{vehicle_id}", post(handlers::update_vehicle))
-        .fallback(handlers::not_found)
+        .fallback(serve_index)
         .layer(TraceLayer::new_for_http())
         .layer(LiveReloadLayer::new())
         .with_state(pool);
