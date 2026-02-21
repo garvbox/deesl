@@ -8,3 +8,7 @@ target/
 
 .env*
 **/.diesel_lock
+
+# Frontend build output
+src/pkg/
+**/node_modules/

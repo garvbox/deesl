@@ -5,6 +5,7 @@ use axum::{
 use deadpool_diesel::postgres::{Manager, Pool};
 use std::env;
 use tokio::net::TcpListener;
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tower_livereload::LiveReloadLayer;
@@ -58,6 +59,11 @@ async fn main() {
     let manager = Manager::new(&config.database_url, deadpool_diesel::Runtime::Tokio1);
     let pool = Pool::builder(manager).build().unwrap();
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     let app = Router::new()
         .nest_service("/static", ServeDir::new("src/pkg"))
         .route("/api/openapi.json", get(serve_openapi))
@@ -69,6 +75,7 @@ async fn main() {
         )
         .route("/vehicles/{vehicle_id}", post(handlers::update_vehicle))
         .fallback(serve_index)
+        .layer(cors)
         .layer(TraceLayer::new_for_http())
         .layer(LiveReloadLayer::new())
         .with_state(pool);
