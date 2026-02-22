@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    routing::{get, post},
+    routing::get,
 };
 use deadpool_diesel::postgres::{Manager, Pool};
 use http_security_headers::{
@@ -108,11 +108,6 @@ async fn main() {
         .merge(oauth_handlers::router())
         .merge(user_handlers::router())
         .merge(vehicle_fuel_handlers::router())
-        .route(
-            "/vehicles",
-            get(handlers::list_vehicles).post(handlers::add_new_vehicle),
-        )
-        .route("/vehicles/{vehicle_id}", post(handlers::update_vehicle))
         .nest_service("/assets", ServeDir::new("src/pkg/assets"))
         .fallback(serve_index)
         .layer(TraceLayer::new_for_http())
