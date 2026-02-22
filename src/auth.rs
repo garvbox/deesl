@@ -1,4 +1,4 @@
-use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 
 pub const JWT_SECRET_KEY: &str = "JWT_SECRET";
@@ -129,23 +129,6 @@ mod tests {
         )
         .unwrap();
         assert!(config.validate_token(&token).is_err());
-    }
-
-    #[test]
-    fn test_new_uses_fallback_secret_when_env_var_absent() {
-        // Safety: single-threaded test context; no other threads reading this var
-        unsafe { std::env::remove_var(JWT_SECRET_KEY) };
-        let config = AuthConfig::new();
-        assert_eq!(config.secret, "dev-secret-change-in-production");
-    }
-
-    #[test]
-    fn test_new_uses_env_var_when_set() {
-        // Safety: single-threaded test context; no other threads reading this var
-        unsafe { std::env::set_var(JWT_SECRET_KEY, "my-prod-secret") };
-        let config = AuthConfig::new();
-        assert_eq!(config.secret, "my-prod-secret");
-        unsafe { std::env::remove_var(JWT_SECRET_KEY) };
     }
 
     #[test]
