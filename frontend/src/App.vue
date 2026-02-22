@@ -1,9 +1,9 @@
 <script setup>
 import { watch, onMounted } from 'vue';
+import { RouterView, RouterLink } from 'vue-router';
 import { useAuth } from './composables/useAuth';
 import { useCurrency } from './composables/useCurrency';
 import Login from './components/Login.vue';
-import Dashboard from './components/Dashboard.vue';
 import UserSettings from './components/UserSettings.vue';
 
 const { isLoggedIn, email, userId, token, logout, initFromRedirect } = useAuth();
@@ -28,13 +28,17 @@ watch(
   <div class="app">
     <header>
       <h1>Deesl Fuel Tracker</h1>
+      <nav v-if="isLoggedIn" class="main-nav">
+        <RouterLink to="/">Dashboard</RouterLink>
+        <RouterLink to="/vehicles">Vehicles</RouterLink>
+      </nav>
       <span v-if="isLoggedIn" class="user-info">{{ email }}</span>
       <span v-else>Please log in</span>
       <UserSettings v-if="isLoggedIn" />
       <button v-if="isLoggedIn" @click="logout">Logout</button>
     </header>
     <main>
-      <Dashboard v-if="isLoggedIn" />
+      <RouterView v-if="isLoggedIn" />
       <div v-else class="auth-forms">
         <Login />
       </div>
@@ -75,6 +79,29 @@ header {
 header h1 {
   font-size: 1.25rem;
   color: #333;
+}
+
+.main-nav {
+  display: flex;
+  gap: 12px;
+}
+
+.main-nav a {
+  font-size: 0.875rem;
+  color: #555;
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.main-nav a:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.main-nav a.router-link-active {
+  color: #007bff;
+  font-weight: 500;
 }
 
 header .user-info {
