@@ -8,7 +8,7 @@ This document provides guidelines for agentic coding agents operating in this re
 - **Backend**: Axum with Tower, Diesel (PostgreSQL), Tokio
 - **Frontend**: Vue 3 + Vite
 - **Database**: Diesel (PostgreSQL) with deadpool for connection pooling
-- **Templating**: Askama (for server-rendered pages)
+- **Templating**: Askama (for OpenAPI documentation)
 - **Async Runtime**: Tokio
 - **Testing**: rstest
 
@@ -111,13 +111,17 @@ diesel print-schema > src/schema.rs
 - Create domain-specific error types for application errors
 - Use the `?` operator for error propagation
 - Convert errors to HTTP status codes at the handler layer
-- Example pattern (from handlers.rs):
+- Example pattern:
   ```rust
-  pub async fn list_vehicles(State(pool): State<Pool>) -> Result<Html<String>, (StatusCode, String)> {
+  pub async fn create_vehicle(
+      State(pool): State<Pool>,
+      Json(payload): Json<CreateVehicleRequest>,
+  ) -> Result<impl IntoResponse, (StatusCode, String)> {
       let conn = pool.get().await.map_err(internal_error)?;
-      // ...
+      // ... business logic
+      Ok((StatusCode::CREATED, Json(VehicleResponse::from(vehicle))))
   }
-  
+
   pub fn internal_error<E>(err: E) -> (StatusCode, String)
   where
       E: std::error::Error,
