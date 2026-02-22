@@ -202,7 +202,7 @@ pub async fn google_callback(
     Ok((resp_headers, Redirect::to(&redirect_url)))
 }
 
-fn extract_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
+pub(crate) fn extract_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
     headers
         .get(header::COOKIE)
         .and_then(|v| v.to_str().ok())
@@ -213,4 +213,72 @@ fn extract_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
                     .map(|v| v.to_string())
             })
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn headers_with_cookie(value: &str) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert(header::COOKIE, value.parse().unwrap());
+        h
+    }
+
+    #[test]
+    fn test_extract_cookie_returns_value_when_present() {
+        let headers = headers_with_cookie("oauth_csrf=abc123");
+        assert_eq!(
+            extract_cookie(&headers, "oauth_csrf"),
+            Some("abc123".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_cookie_returns_none_when_absent() {
+        let headers = headers_with_cookie("other_cookie=xyz");
+        assert_eq!(extract_cookie(&headers, "oauth_csrf"), None);
+    }
+
+    #[test]
+    fn test_extract_cookie_returns_none_when_no_cookie_header() {
+        let headers = HeaderMap::new();
+        assert_eq!(extract_cookie(&headers, "oauth_csrf"), None);
+    }
+
+    #[test]
+    fn test_extract_cookie_finds_cookie_among_multiple() {
+        let headers = headers_with_cookie("session=sess1; oauth_csrf=state42; theme=dark");
+        assert_eq!(
+            extract_cookie(&headers, "oauth_csrf"),
+            Some("state42".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_cookie_handles_whitespace_around_pairs() {
+        // The key=value pair is trimmed as a whole, so trailing spaces on the pair
+        // are stripped, but leading spaces in the value are preserved
+        let headers = headers_with_cookie("foo=bar;  oauth_csrf=  spaced  ; baz=qux");
+        assert_eq!(
+            extract_cookie(&headers, "oauth_csrf"),
+            Some("  spaced".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_cookie_does_not_match_partial_name() {
+        // "csrf" should not match "oauth_csrf"
+        let headers = headers_with_cookie("oauth_csrf=secret");
+        assert_eq!(extract_cookie(&headers, "csrf"), None);
+    }
+
+    #[test]
+    fn test_extract_cookie_returns_empty_string_value() {
+        let headers = headers_with_cookie("oauth_csrf=");
+        assert_eq!(
+            extract_cookie(&headers, "oauth_csrf"),
+            Some(String::new())
+        );
+    }
 }

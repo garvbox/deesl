@@ -70,6 +70,17 @@ impl Config {
     fn is_development(&self) -> bool {
         self.environment == "development"
     }
+
+    #[cfg(test)]
+    fn with_environment(environment: &str, cors_origins: Vec<String>) -> Self {
+        Self {
+            port: 8000,
+            host: "localhost".to_string(),
+            database_url: String::new(),
+            environment: environment.to_string(),
+            cors_origins,
+        }
+    }
 }
 
 #[tokio::main]
@@ -159,4 +170,59 @@ fn build_security_headers() -> SecurityHeadersLayer {
         .unwrap();
 
     SecurityHeadersLayer::new(Arc::new(headers))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- Config::is_development ---
+
+    #[test]
+    fn test_config_is_development_when_environment_is_development() {
+        let config = Config::with_environment("development", vec![]);
+        assert!(config.is_development());
+    }
+
+    #[test]
+    fn test_config_is_not_development_when_environment_is_production() {
+        let config = Config::with_environment("production", vec![]);
+        assert!(!config.is_development());
+    }
+
+    #[test]
+    fn test_config_is_not_development_when_environment_is_staging() {
+        let config = Config::with_environment("staging", vec![]);
+        assert!(!config.is_development());
+    }
+
+    #[test]
+    fn test_config_is_not_development_when_environment_is_empty() {
+        let config = Config::with_environment("", vec![]);
+        assert!(!config.is_development());
+    }
+
+    // --- build_production_cors ---
+
+    #[test]
+    fn test_build_production_cors_with_empty_origins_returns_layer() {
+        // Should not panic; returns a restrictive (no-allow) layer
+        let _layer = build_production_cors(&[]);
+    }
+
+    #[test]
+    fn test_build_production_cors_with_valid_origins_returns_layer() {
+        let origins = vec![
+            "https://example.com".to_string(),
+            "https://app.example.com".to_string(),
+        ];
+        let _layer = build_production_cors(&origins);
+    }
+
+    #[test]
+    fn test_build_production_cors_ignores_invalid_origin_strings() {
+        // Invalid origins are filtered out by `filter_map(|o| o.parse().ok())`
+        let origins = vec!["not a valid origin".to_string()];
+        let _layer = build_production_cors(&origins);
+    }
 }

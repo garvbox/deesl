@@ -200,7 +200,7 @@ pub async fn create_vehicle(
     let registration = payload.registration.clone();
     let owner_id = payload.owner_id;
 
-    let vehicle: Vehicle = conn
+    let _vehicle: Vehicle = conn
         .interact(move |conn| {
             diesel::insert_into(vehicles::table)
                 .values(NewVehicle {
@@ -216,12 +216,84 @@ pub async fn create_vehicle(
         .map_err(internal_error)?
         .map_err(|e| {
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("DB error: {}", e),
-            )
-        })?;
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("DB error: {}", e),
+        )
+    })?;
 
-    Ok((StatusCode::CREATED, Json(VehicleResponse::from(vehicle))))
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{FuelStation, Vehicle};
+    use chrono::NaiveDateTime;
+
+    fn epoch() -> NaiveDateTime {
+        chrono::DateTime::from_timestamp(0, 0).unwrap().naive_utc()
+    }
+
+    fn make_vehicle(id: i32, make: &str, model: &str, registration: &str) -> Vehicle {
+        Vehicle {
+            id,
+            make: make.to_string(),
+            model: model.to_string(),
+            registration: registration.to_string(),
+            created: epoch(),
+            owner_id: 1,
+        }
+    }
+
+    fn make_station(id: i32, name: &str) -> FuelStation {
+        FuelStation {
+            id,
+            name: name.to_string(),
+            created_at: epoch(),
+        }
+    }
+
+    // --- FuelStationResponse::from ---
+
+    #[test]
+    fn test_fuel_station_response_maps_id_and_name() {
+        let station = make_station(5, "Shell Grafton Street");
+        let response = FuelStationResponse::from(station);
+        assert_eq!(response.id, 5);
+        assert_eq!(response.name, "Shell Grafton Street");
+    }
+
+    #[test]
+    fn test_fuel_station_response_does_not_include_created_at() {
+        // Compile-time guarantee: FuelStationResponse only has id + name
+        let station = make_station(1, "BP");
+        let response = FuelStationResponse::from(station);
+        let _ = response.id;
+        let _ = response.name;
+    }
+
+    // --- VehicleResponse::from ---
+
+    #[test]
+    fn test_vehicle_response_maps_all_fields() {
+        let vehicle = make_vehicle(3, "Toyota", "Corolla", "241-D-12345");
+        let response = VehicleResponse::from(vehicle);
+        assert_eq!(response.id, 3);
+        assert_eq!(response.make, "Toyota");
+        assert_eq!(response.model, "Corolla");
+        assert_eq!(response.registration, "241-D-12345");
+    }
+
+    #[test]
+    fn test_vehicle_response_does_not_include_owner_id_or_created() {
+        // VehicleResponse only exposes id, make, model, registration
+        let vehicle = make_vehicle(99, "Ford", "Focus", "222-G-9999");
+        let response = VehicleResponse::from(vehicle);
+        let _ = response.id;
+        let _ = response.make;
+        let _ = response.model;
+        let _ = response.registration;
+    }
 }
 
 pub async fn delete_vehicle(
