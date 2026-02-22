@@ -1,0 +1,35 @@
+services:
+  db:
+    container_name: db
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: deesl
+    ports:
+      - 5432:5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 15s
+      timeout: 15s
+      retries: 5
+
+  app:
+    build: .
+    container_name: app
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/deesl
+      HOST: 0.0.0.0
+      PORT: 8000
+      ENVIRONMENT: production
+      CORS_ORIGINS: ""
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
