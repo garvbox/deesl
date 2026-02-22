@@ -20,8 +20,6 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN cargo install diesel_cli --no-default-features --features postgres
-
 WORKDIR /app
 
 COPY Cargo.toml Cargo.lock ./
@@ -30,6 +28,8 @@ RUN mkdir -p src && echo "fn main() {}" > src/main.rs
 
 # Build only dependencies - layer caching optimisation
 RUN cargo build --release
+
+RUN cargo install diesel_cli --no-default-features --features postgres
 
 COPY . .
 RUN touch src/main.rs
@@ -46,8 +46,6 @@ RUN apt-get update && apt-get install -y \
     libpq5 \
     curl \
     && rm -rf /var/lib/apt/lists/*
-
-RUN cargo install diesel_cli --no-default-features --features postgres || true
 
 WORKDIR /app
 
