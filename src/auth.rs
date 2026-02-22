@@ -1,4 +1,4 @@
-use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 
 const JWT_SECRET_KEY: &str = "JWT_SECRET";
@@ -48,6 +48,7 @@ impl AuthConfig {
         )
     }
 
+    #[allow(dead_code)]
     pub fn validate_token(&self, token: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
         decode::<Claims>(
             token,

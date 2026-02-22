@@ -13,6 +13,7 @@ use crate::{
     schema,
 };
 
+#[allow(dead_code)]
 pub async fn not_found(uri: axum::http::Uri) -> impl IntoResponse {
     (StatusCode::NOT_FOUND, format!("No route {}", uri))
 }

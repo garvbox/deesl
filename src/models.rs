@@ -78,6 +78,7 @@ pub struct NewFuelEntry {
 #[derive(Queryable, Selectable, serde::Serialize)]
 #[diesel(table_name = crate::schema::vehicle_shares)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[allow(dead_code)]
 pub struct VehicleShare {
     pub id: i32,
     pub vehicle_id: i32,

@@ -5,6 +5,7 @@ import { useAuth } from '../composables/useAuth';
 
 const props = defineProps({
   entry: Object,
+  showVehicle: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['delete']);
@@ -27,6 +28,7 @@ async function handleDelete() {
 <template>
   <li class="entry-item">
     <div class="entry-info">
+      <span v-if="showVehicle" class="vehicle">{{ entry.vehicle_make }} {{ entry.vehicle_model }}</span>
       <span class="date">{{ entry.filled_at }}</span>
       <span class="mileage">{{ entry.mileage_km }} km</span>
       <span class="litres">{{ entry.litres }} L</span>

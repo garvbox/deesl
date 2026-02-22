@@ -248,6 +248,9 @@ pub async fn delete_vehicle(
 pub struct FuelEntryResponse {
     pub id: i32,
     pub vehicle_id: i32,
+    pub vehicle_make: String,
+    pub vehicle_model: String,
+    pub vehicle_registration: String,
     pub station_id: Option<i32>,
     pub station_name: Option<String>,
     pub mileage_km: i32,
@@ -262,9 +265,10 @@ pub async fn list_fuel_entries(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let conn = pool.get().await.map_err(internal_error)?;
 
-    let entries: Vec<(FuelEntry, Option<String>)> = conn
+    let entries: Vec<(FuelEntry, Option<String>, String, String, String)> = conn
         .interact(move |conn| {
             let mut query = fuel_entries::table
+                .inner_join(vehicles::table)
                 .left_outer_join(fuel_stations::table)
                 .into_boxed();
 
@@ -272,8 +276,18 @@ pub async fn list_fuel_entries(
                 query = query.filter(fuel_entries::vehicle_id.eq(vehicle_id));
             }
 
+            if let Some(user_id) = params.user_id {
+                query = query.filter(vehicles::owner_id.eq(user_id));
+            }
+
             query
-                .select((FuelEntry::as_select(), fuel_stations::name.nullable()))
+                .select((
+                    FuelEntry::as_select(),
+                    fuel_stations::name.nullable(),
+                    vehicles::make,
+                    vehicles::model,
+                    vehicles::registration,
+                ))
                 .order(fuel_entries::filled_at.desc())
                 .load(conn)
         })
@@ -288,16 +302,23 @@ pub async fn list_fuel_entries(
 
     let response: Vec<FuelEntryResponse> = entries
         .into_iter()
-        .map(|(e, station_name)| FuelEntryResponse {
-            id: e.id,
-            vehicle_id: e.vehicle_id,
-            station_id: e.station_id,
-            station_name,
-            mileage_km: e.mileage_km,
-            litres: e.litres,
-            cost: e.cost,
-            filled_at: e.filled_at,
-        })
+        .map(
+            |(e, station_name, vehicle_make, vehicle_model, vehicle_registration)| {
+                FuelEntryResponse {
+                    id: e.id,
+                    vehicle_id: e.vehicle_id,
+                    vehicle_make,
+                    vehicle_model,
+                    vehicle_registration,
+                    station_id: e.station_id,
+                    station_name,
+                    mileage_km: e.mileage_km,
+                    litres: e.litres,
+                    cost: e.cost,
+                    filled_at: e.filled_at,
+                }
+            },
+        )
         .collect();
 
     Ok(Json(response))
@@ -306,6 +327,7 @@ pub async fn list_fuel_entries(
 #[derive(Deserialize)]
 pub struct FuelEntryQueryParams {
     pub vehicle_id: Option<i32>,
+    pub user_id: Option<i32>,
 }
 
 pub async fn get_fuel_entry(
@@ -314,10 +336,12 @@ pub async fn get_fuel_entry(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let conn = pool.get().await.map_err(internal_error)?;
 
-    let entry: FuelEntry = conn
+    let (entry, vehicle): (FuelEntry, Vehicle) = conn
         .interact(move |conn| {
             fuel_entries::table
+                .inner_join(vehicles::table)
                 .filter(fuel_entries::id.eq(id))
+                .select((FuelEntry::as_select(), Vehicle::as_select()))
                 .first(conn)
         })
         .await
@@ -327,6 +351,9 @@ pub async fn get_fuel_entry(
     Ok(Json(FuelEntryResponse {
         id: entry.id,
         vehicle_id: entry.vehicle_id,
+        vehicle_make: vehicle.make,
+        vehicle_model: vehicle.model,
+        vehicle_registration: vehicle.registration,
         station_id: entry.station_id,
         station_name: None,
         mileage_km: entry.mileage_km,
@@ -359,9 +386,9 @@ pub async fn create_fuel_entry(
     let cost = payload.cost;
     let filled_at = payload.filled_at;
 
-    let entry: FuelEntry = conn
+    let (entry, vehicle): (FuelEntry, Vehicle) = conn
         .interact(move |conn| {
-            diesel::insert_into(fuel_entries::table)
+            let entry = diesel::insert_into(fuel_entries::table)
                 .values(NewFuelEntry {
                     vehicle_id,
                     station_id,
@@ -371,7 +398,13 @@ pub async fn create_fuel_entry(
                     filled_at,
                 })
                 .returning(FuelEntry::as_returning())
-                .get_result(conn)
+                .get_result(conn)?;
+
+            let vehicle = vehicles::table
+                .filter(vehicles::id.eq(entry.vehicle_id))
+                .first(conn)?;
+
+            Ok::<_, diesel::result::Error>((entry, vehicle))
         })
         .await
         .map_err(internal_error)?
@@ -387,6 +420,9 @@ pub async fn create_fuel_entry(
         Json(FuelEntryResponse {
             id: entry.id,
             vehicle_id: entry.vehicle_id,
+            vehicle_make: vehicle.make,
+            vehicle_model: vehicle.model,
+            vehicle_registration: vehicle.registration,
             station_id: entry.station_id,
             station_name: None,
             mileage_km: entry.mileage_km,

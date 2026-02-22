@@ -123,7 +123,8 @@ form label span {
 input[type="text"],
 input[type="email"],
 input[type="password"],
-input[type="number"] {
+input[type="number"],
+select {
   width: 100%;
   padding: 10px;
   border: 1px solid #ddd;
@@ -131,7 +132,8 @@ input[type="number"] {
   font-size: 16px;
 }
 
-input:focus {
+input:focus,
+select:focus {
   outline: none;
   border-color: #007bff;
 }
@@ -231,6 +233,11 @@ form button {
   font-size: 0.875rem;
 }
 
+.entry-info .vehicle {
+  font-weight: 500;
+  color: #007bff;
+}
+
 .entry-info .date {
   color: #666;
   min-width: 140px;
@@ -279,6 +286,10 @@ form button {
 
 .autocomplete-dropdown li:hover {
   background: #f0f0f0;
+}
+
+.recent-entries-section {
+  margin-bottom: 24px;
 }
 
 @media (max-width: 480px) {

@@ -17,6 +17,7 @@ use utoipa::{OpenApi, ToSchema};
 pub struct ApiDoc;
 
 #[derive(Deserialize, ToSchema)]
+#[allow(dead_code)]
 pub struct RegisterRequest {
     #[schema(example = "user@example.com")]
     pub email: String,
@@ -25,6 +26,7 @@ pub struct RegisterRequest {
 }
 
 #[derive(Deserialize, ToSchema)]
+#[allow(dead_code)]
 pub struct LoginRequest {
     #[schema(example = "user@example.com")]
     pub email: String,

@@ -2,19 +2,23 @@
 import { ref, onMounted } from 'vue';
 import { useAuth } from '../composables/useAuth';
 import { listVehicles } from '../services/vehicles';
-import { listFuelStations } from '../services/fuelEntries';
+import { listFuelStations, listRecentFuelEntries } from '../services/fuelEntries';
 import VehicleItem from './VehicleItem.vue';
 import AddVehicleForm from './AddVehicleForm.vue';
 import FuelEntrySection from './FuelEntrySection.vue';
+import FuelEntryItem from './FuelEntryItem.vue';
+import QuickAddFuelForm from './QuickAddFuelForm.vue';
 
 const { token, userId } = useAuth();
 
 const vehicles = ref([]);
 const stations = ref([]);
+const recentEntries = ref([]);
 const loading = ref(true);
 const error = ref('');
 const showAddForm = ref(false);
 const selectedVehicle = ref(null);
+const showQuickAdd = ref(false);
 
 async function loadData() {
   try {
@@ -31,7 +35,19 @@ async function loadData() {
   }
 }
 
-onMounted(loadData);
+async function loadRecentEntries() {
+  if (!userId.value) return;
+  try {
+    recentEntries.value = await listRecentFuelEntries(userId.value, token.value);
+  } catch (e) {
+    console.error('Failed to load recent entries:', e);
+  }
+}
+
+onMounted(() => {
+  loadData();
+  loadRecentEntries();
+});
 </script>
 
 <template>
@@ -41,6 +57,34 @@ onMounted(loadData);
 
     <template v-if="!loading">
       <template v-if="!selectedVehicle">
+        <section class="recent-entries-section">
+          <div class="section-header">
+            <h2>Recent Fuel Entries</h2>
+            <button @click="showQuickAdd = !showQuickAdd">
+              {{ showQuickAdd ? 'Cancel' : 'Quick Add' }}
+            </button>
+          </div>
+
+          <QuickAddFuelForm
+            v-if="showQuickAdd"
+            :vehicles="vehicles"
+            :stations="stations"
+            @success="showQuickAdd = false; loadRecentEntries()"
+          />
+
+          <ul v-if="recentEntries.length > 0" class="entry-list">
+            <FuelEntryItem
+              v-for="entry in recentEntries"
+              :key="entry.id"
+              :entry="entry"
+              :show-vehicle="true"
+              @delete="loadRecentEntries"
+            />
+          </ul>
+
+          <p v-else class="empty-state">No fuel entries yet. Add your first entry!</p>
+        </section>
+
         <section class="vehicles-section">
           <div class="section-header">
             <h2>Your Vehicles</h2>

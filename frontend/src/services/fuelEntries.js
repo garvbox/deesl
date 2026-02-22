@@ -4,6 +4,10 @@ export async function listFuelEntries(vehicleId, token) {
   return apiGet(`/fuel-entries?vehicle_id=${vehicleId}`, token);
 }
 
+export async function listRecentFuelEntries(userId, token, limit = 10) {
+  return apiGet(`/fuel-entries?user_id=${userId}&limit=${limit}`, token);
+}
+
 export async function createFuelEntry(vehicleId, stationId, mileage, litres, cost, token) {
   return apiPost('/fuel-entries', {
     vehicle_id: vehicleId,
