@@ -5,15 +5,13 @@ use axum::{
     response::{IntoResponse, Redirect},
     routing::get,
 };
+use diesel::prelude::*;
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope,
-    TokenResponse, TokenUrl,
-    basic::BasicClient,
-    reqwest::async_http_client,
+    TokenResponse, TokenUrl, basic::BasicClient, reqwest::async_http_client,
 };
 use serde::Deserialize;
 use std::env;
-use diesel::prelude::*;
 
 use crate::auth::AuthConfig;
 use crate::handlers::internal_error;
@@ -75,10 +73,7 @@ pub async fn google_login(State(state): State<AppState>) -> impl IntoResponse {
 
     let mut headers = HeaderMap::new();
     headers.insert(header::SET_COOKIE, cookie.parse().unwrap());
-    headers.insert(
-        header::LOCATION,
-        auth_url.to_string().parse().unwrap(),
-    );
+    headers.insert(header::LOCATION, auth_url.to_string().parse().unwrap());
 
     (StatusCode::FOUND, headers)
 }
@@ -100,10 +95,8 @@ pub async fn google_callback(
     req_headers: HeaderMap,
     axum::extract::Query(params): axum::extract::Query<CallbackParams>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let csrf_cookie = extract_cookie(&req_headers, CSRF_COOKIE).ok_or((
-        StatusCode::BAD_REQUEST,
-        "Missing CSRF cookie".to_string(),
-    ))?;
+    let csrf_cookie = extract_cookie(&req_headers, CSRF_COOKIE)
+        .ok_or((StatusCode::BAD_REQUEST, "Missing CSRF cookie".to_string()))?;
 
     if csrf_cookie != params.state {
         return Err((StatusCode::BAD_REQUEST, "CSRF state mismatch".to_string()));
@@ -170,10 +163,7 @@ pub async fn google_callback(
             }
 
             diesel::insert_into(users::table)
-                .values((
-                    users::email.eq(&email),
-                    users::google_id.eq(&google_id),
-                ))
+                .values((users::email.eq(&email), users::google_id.eq(&google_id)))
                 .returning(User::as_returning())
                 .get_result(conn)
         })
