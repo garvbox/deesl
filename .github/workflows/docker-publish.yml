@@ -12,12 +12,70 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.cargo-version.outputs.version }}
+      version_changed: ${{ steps.check.outputs.changed }}
+      tag_name: ${{ steps.check.outputs.tag_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Extract app version
+        id: cargo-version
+        run: echo "version=$(grep -m1 '^version' Cargo.toml | sed 's/.*= *"//;s/"//')" >> "$GITHUB_OUTPUT"
+
+      - name: Check if version changed
+        id: check
+        run: |
+          CURRENT_VERSION="${{ steps.cargo-version.outputs.version }}"
+          PREVIOUS_VERSION=$(git show HEAD~1:Cargo.toml | grep -m1 '^version' | sed 's/.*= *"//;s/"//')
+          
+          echo "Current version: $CURRENT_VERSION"
+          echo "Previous version: $PREVIOUS_VERSION"
+          
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "tag_name=v${CURRENT_VERSION}" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  create-tag:
+    runs-on: ubuntu-latest
+    needs: check-version
+    if: needs.check-version.outputs.version_changed == 'true'
+    permissions:
+      contents: write
+    steps:
+      - name: Create Git tag
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tagName = '${{ needs.check-version.outputs.tag_name }}';
+            const sha = context.sha;
+            
+            try {
+              await github.rest.git.createRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `refs/tags/${tagName}`,
+                sha: sha
+              });
+              console.log(`Created tag ${tagName} at ${sha}`);
+            } catch (error) {
+              console.error('Error creating tag:', error);
+              throw error;
+            }
+
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,27 +118,23 @@ jobs:
 
   create-release:
     runs-on: ubuntu-latest
-    needs: build-and-push
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [check-version, build-and-push, create-tag]
+    if: needs.create-tag.result == 'success'
     permissions:
       contents: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract app version
-        id: cargo-version
-        run: echo "version=$(grep -m1 '^version' Cargo.toml | sed 's/.*= *"//;s/"//')" >> "$GITHUB_OUTPUT"
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Release ${{ steps.cargo-version.outputs.version }}
+          tag_name: ${{ needs.check-version.outputs.tag_name }}
+          name: Release ${{ needs.check-version.outputs.version }}
           body: |
-            Release ${{ steps.cargo-version.outputs.version }}
+            Release ${{ needs.check-version.outputs.version }}
 
-            Docker image: `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.cargo-version.outputs.version }}`
+            Docker image: `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.check-version.outputs.version }}`
           draft: false
           prerelease: false
         env:
