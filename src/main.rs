@@ -97,7 +97,6 @@ async fn main() {
     };
 
     let mut app = Router::new()
-        .nest_service("/static", ServeDir::new("src/pkg"))
         .route("/api/openapi.json", get(serve_openapi))
         .merge(oauth_handlers::router())
         .merge(user_handlers::router())
@@ -107,6 +106,7 @@ async fn main() {
             get(handlers::list_vehicles).post(handlers::add_new_vehicle),
         )
         .route("/vehicles/{vehicle_id}", post(handlers::update_vehicle))
+        .nest_service("/assets", ServeDir::new("src/pkg/assets"))
         .fallback(serve_index)
         .layer(TraceLayer::new_for_http())
         .with_state(app_state);
