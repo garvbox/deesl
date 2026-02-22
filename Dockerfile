@@ -1,3 +1,5 @@
+###########################################
+# -- Frontend builder stage --
 FROM node:22-alpine AS frontend-builder
 
 WORKDIR /app/frontend
@@ -8,6 +10,8 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
+###########################################
+# -- Backend Builder Stage --
 FROM rust:bookworm AS builder
 
 RUN apt-get update && apt-get install -y \
@@ -28,9 +32,12 @@ RUN mkdir -p src && echo "fn main() {}" > src/main.rs
 RUN cargo build --release
 
 COPY . .
+RUN touch src/main.rs
 
 RUN cargo build --release
 
+###########################################
+# -- App Stage --
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y \
