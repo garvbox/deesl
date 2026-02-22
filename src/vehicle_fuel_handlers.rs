@@ -200,7 +200,7 @@ pub async fn create_vehicle(
     let registration = payload.registration.clone();
     let owner_id = payload.owner_id;
 
-    let _vehicle: Vehicle = conn
+    let vehicle: Vehicle = conn
         .interact(move |conn| {
             diesel::insert_into(vehicles::table)
                 .values(NewVehicle {
@@ -221,7 +221,10 @@ pub async fn create_vehicle(
             )
         })?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok((
+        StatusCode::CREATED,
+        Json(VehicleResponse::from(vehicle)),
+    ))
 }
 
 #[cfg(test)]
