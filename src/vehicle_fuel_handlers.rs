@@ -216,10 +216,10 @@ pub async fn create_vehicle(
         .map_err(internal_error)?
         .map_err(|e| {
             (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("DB error: {}", e),
-        )
-    })?;
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("DB error: {}", e),
+            )
+        })?;
 
     Ok(StatusCode::NO_CONTENT)
 }

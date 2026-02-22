@@ -276,9 +276,6 @@ mod tests {
     #[test]
     fn test_extract_cookie_returns_empty_string_value() {
         let headers = headers_with_cookie("oauth_csrf=");
-        assert_eq!(
-            extract_cookie(&headers, "oauth_csrf"),
-            Some(String::new())
-        );
+        assert_eq!(extract_cookie(&headers, "oauth_csrf"), Some(String::new()));
     }
 }
