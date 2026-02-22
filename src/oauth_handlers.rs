@@ -13,12 +13,12 @@ use oauth2::{
 use serde::Deserialize;
 use std::env;
 
+use crate::Config;
 use crate::auth::AuthConfig;
 use crate::handlers::internal_error;
 use crate::models::User;
 use crate::schema::users;
 use crate::state::AppState;
-use crate::Config;
 
 const CSRF_COOKIE: &str = "oauth_csrf";
 
