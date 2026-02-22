@@ -18,6 +18,7 @@ use crate::handlers::internal_error;
 use crate::models::User;
 use crate::schema::users;
 use crate::state::AppState;
+use crate::Config;
 
 const CSRF_COOKIE: &str = "oauth_csrf";
 
@@ -27,12 +28,11 @@ pub struct OAuthConfig {
 }
 
 impl OAuthConfig {
-    pub fn new() -> Self {
+    pub fn new(config: &Config) -> Self {
         let client_id = env::var("GOOGLE_CLIENT_ID").expect("GOOGLE_CLIENT_ID must be set");
         let client_secret =
             env::var("GOOGLE_CLIENT_SECRET").expect("GOOGLE_CLIENT_SECRET must be set");
-        let redirect_url = env::var("OAUTH_REDIRECT_URL")
-            .unwrap_or_else(|_| "http://localhost:8000/api/auth/google/callback".to_string());
+        let redirect_url = format!("{}/api/auth/google/callback", config.base_url);
 
         let client = BasicClient::new(
             ClientId::new(client_id),

@@ -38,23 +38,28 @@ async fn serve_index() -> impl axum::response::IntoResponse {
     axum::response::Html(include_str!("pkg/index.html"))
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     port: usize,
     host: String,
     database_url: String,
     environment: String,
     cors_origins: Vec<String>,
+    pub base_url: String,
 }
 
 impl Config {
     fn new() -> Self {
+        let port: usize = env::var("PORT")
+            .unwrap_or("8000".to_string())
+            .parse()
+            .unwrap();
+        let host = env::var("HOST").unwrap_or("localhost".to_string());
+        let default_base_url = format!("http://{}:{}", host, port);
+
         Self {
-            port: env::var("PORT")
-                .unwrap_or("8000".to_string())
-                .parse()
-                .unwrap(),
-            host: env::var("HOST").unwrap_or("localhost".to_string()),
+            port,
+            host: host.clone(),
             database_url: env::var("DATABASE_URL")
                 .unwrap_or("postgres://postgres:postgres@localhost/deesl".to_string()),
             environment: env::var("ENVIRONMENT").unwrap_or("development".to_string()),
@@ -64,6 +69,7 @@ impl Config {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect(),
+            base_url: env::var("BASE_URL").unwrap_or(default_base_url),
         }
     }
 
@@ -79,6 +85,7 @@ impl Config {
             database_url: String::new(),
             environment: environment.to_string(),
             cors_origins,
+            base_url: "http://localhost:8000".to_string(),
         }
     }
 }
@@ -93,7 +100,7 @@ async fn main() {
     let pool = Pool::builder(manager).build().unwrap();
     let app_state = AppState {
         pool,
-        oauth: oauth_handlers::OAuthConfig::new(),
+        oauth: oauth_handlers::OAuthConfig::new(&config),
     };
 
     let mut app = Router::new()
