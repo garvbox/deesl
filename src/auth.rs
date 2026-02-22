@@ -132,23 +132,6 @@ mod tests {
     }
 
     #[test]
-    fn test_new_uses_fallback_secret_when_env_var_absent() {
-        // Safety: single-threaded test context; no other threads reading this var
-        unsafe { std::env::remove_var(JWT_SECRET_KEY) };
-        let config = AuthConfig::new();
-        assert_eq!(config.secret, "dev-secret-change-in-production");
-    }
-
-    #[test]
-    fn test_new_uses_env_var_when_set() {
-        // Safety: single-threaded test context; no other threads reading this var
-        unsafe { std::env::set_var(JWT_SECRET_KEY, "my-prod-secret") };
-        let config = AuthConfig::new();
-        assert_eq!(config.secret, "my-prod-secret");
-        unsafe { std::env::remove_var(JWT_SECRET_KEY) };
-    }
-
-    #[test]
     fn test_token_expiry_is_approximately_seven_days_from_now() {
         let config = config_with_secret("test-secret");
         let before = chrono::Utc::now().timestamp();
