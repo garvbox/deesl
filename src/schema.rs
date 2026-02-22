@@ -27,6 +27,7 @@ diesel::table! {
         email -> Text,
         password_hash -> Text,
         created_at -> Timestamp,
+        currency -> Text,
     }
 }
 

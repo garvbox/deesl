@@ -24,6 +24,7 @@ mod auth_handlers;
 mod handlers;
 mod models;
 mod schema;
+mod user_handlers;
 mod vehicle_fuel_handlers;
 
 async fn serve_openapi() -> axum::response::Json<String> {
@@ -81,6 +82,7 @@ async fn main() {
         .nest_service("/static", ServeDir::new("src/pkg"))
         .route("/api/openapi.json", get(serve_openapi))
         .merge(auth_handlers::router())
+        .merge(user_handlers::router())
         .merge(vehicle_fuel_handlers::router())
         .route(
             "/vehicles",

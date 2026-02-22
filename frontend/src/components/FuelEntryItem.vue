@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { deleteFuelEntry } from '../services/fuelEntries';
 import { useAuth } from '../composables/useAuth';
+import { useCurrency } from '../composables/useCurrency';
 
 const props = defineProps({
   entry: Object,
@@ -11,6 +12,7 @@ const props = defineProps({
 const emit = defineEmits(['delete']);
 
 const { token } = useAuth();
+const { formatCost } = useCurrency();
 const showConfirm = ref(false);
 const deleting = ref(false);
 
@@ -45,7 +47,7 @@ async function handleDelete() {
       <span class="date">{{ formatDate(entry.filled_at) }}</span>
       <span class="mileage">{{ entry.mileage_km }} km</span>
       <span class="litres">{{ entry.litres }} L</span>
-      <span class="cost">${{ entry.cost }}</span>
+      <span class="cost">{{ formatCost(entry.cost) }}</span>
       <span v-if="entry.station_name" class="station">{{ entry.station_name }}</span>
     </div>
     <div class="entry-actions">

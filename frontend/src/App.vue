@@ -1,12 +1,25 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useAuth } from './composables/useAuth';
+import { useCurrency } from './composables/useCurrency';
 import Login from './components/Login.vue';
 import Register from './components/Register.vue';
 import Dashboard from './components/Dashboard.vue';
+import UserSettings from './components/UserSettings.vue';
 
-const { isLoggedIn, email, logout } = useAuth();
+const { isLoggedIn, email, userId, token, logout } = useAuth();
+const { loadCurrency } = useCurrency();
 const showRegister = ref(false);
+
+watch(
+  isLoggedIn,
+  (loggedIn) => {
+    if (loggedIn) {
+      loadCurrency(userId.value, token.value);
+    }
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -15,6 +28,7 @@ const showRegister = ref(false);
       <h1>Deesl Fuel Tracker</h1>
       <span v-if="isLoggedIn" class="user-info">{{ email }}</span>
       <span v-else>Please log in</span>
+      <UserSettings v-if="isLoggedIn" />
       <button v-if="isLoggedIn" @click="logout">Logout</button>
     </header>
     <main>
