@@ -3,11 +3,12 @@ use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::AppState;
 use crate::handlers::internal_error;
 use crate::models::User;
 use crate::schema::users;
 
-pub fn router() -> Router<Pool> {
+pub fn router() -> Router<AppState> {
     Router::new().route("/api/users/me", get(get_me).patch(update_me))
 }
 

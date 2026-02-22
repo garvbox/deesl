@@ -20,12 +20,15 @@ use utoipa::OpenApi;
 
 mod api_doc;
 mod auth;
-mod auth_handlers;
 mod handlers;
 mod models;
+mod oauth_handlers;
 mod schema;
+mod state;
 mod user_handlers;
 mod vehicle_fuel_handlers;
+
+pub use state::AppState;
 
 async fn serve_openapi() -> axum::response::Json<String> {
     axum::response::Json(api_doc::ApiDoc::openapi().to_json().unwrap())
@@ -77,11 +80,15 @@ async fn main() {
 
     let manager = Manager::new(&config.database_url, deadpool_diesel::Runtime::Tokio1);
     let pool = Pool::builder(manager).build().unwrap();
+    let app_state = AppState {
+        pool,
+        oauth: oauth_handlers::OAuthConfig::new(),
+    };
 
     let mut app = Router::new()
         .nest_service("/static", ServeDir::new("src/pkg"))
         .route("/api/openapi.json", get(serve_openapi))
-        .merge(auth_handlers::router())
+        .merge(oauth_handlers::router())
         .merge(user_handlers::router())
         .merge(vehicle_fuel_handlers::router())
         .route(
@@ -91,7 +98,7 @@ async fn main() {
         .route("/vehicles/{vehicle_id}", post(handlers::update_vehicle))
         .fallback(serve_index)
         .layer(TraceLayer::new_for_http())
-        .with_state(pool);
+        .with_state(app_state);
 
     if config.is_development() {
         let cors = CorsLayer::new()

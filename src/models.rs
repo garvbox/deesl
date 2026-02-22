@@ -7,9 +7,10 @@ use diesel::prelude::*;
 pub struct User {
     pub id: i32,
     pub email: String,
-    pub password_hash: String,
+    pub password_hash: Option<String>,
     pub created_at: NaiveDateTime,
     pub currency: String,
+    pub google_id: Option<String>,
 }
 
 #[derive(Queryable, Selectable, serde::Serialize)]

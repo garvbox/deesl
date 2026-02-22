@@ -9,11 +9,12 @@ use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
 use serde::Deserialize;
 
+use crate::AppState;
 use crate::handlers::internal_error;
 use crate::models::{FuelEntry, FuelStation, NewFuelEntry, NewFuelStation, NewVehicle, Vehicle};
 use crate::schema::{fuel_entries, fuel_stations, vehicles};
 
-pub fn router() -> Router<Pool> {
+pub fn router() -> Router<AppState> {
     Router::new()
         .route(
             "/api/fuel-stations",

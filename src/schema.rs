@@ -25,9 +25,10 @@ diesel::table! {
     users (id) {
         id -> Int4,
         email -> Text,
-        password_hash -> Text,
+        password_hash -> Nullable<Text>,
         created_at -> Timestamp,
         currency -> Text,
+        google_id -> Nullable<Text>,
     }
 }
 

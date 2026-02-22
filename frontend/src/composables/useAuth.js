@@ -1,5 +1,4 @@
 import { ref, computed } from 'vue';
-import { apiPost } from '../services/api';
 
 const user = ref(getStoredAuth());
 
@@ -7,7 +6,7 @@ function getStoredAuth() {
   const token = localStorage.getItem('auth_token');
   const userId = localStorage.getItem('user_id');
   const email = localStorage.getItem('user_email');
-  
+
   if (token && userId && email) {
     return { token, userId: parseInt(userId, 10), email };
   }
@@ -32,24 +31,24 @@ export function useAuth() {
   const email = computed(() => user.value?.email);
   const userId = computed(() => user.value?.userId);
 
-  async function login(emailVal, passwordVal) {
-    const response = await apiPost('/auth/login', { email: emailVal, password: passwordVal });
-    user.value = { 
-      token: response.token, 
-      userId: response.user_id, 
-      email: response.email 
-    };
-    storeAuth(response);
-  }
+  // Picks up token/user_id/email query params placed by the OAuth callback redirect
+  function initFromRedirect() {
+    const params = new URLSearchParams(window.location.search);
+    const redirectToken = params.get('token');
+    const redirectUserId = params.get('user_id');
+    const redirectEmail = params.get('email');
 
-  async function register(emailVal, passwordVal) {
-    const response = await apiPost('/auth/register', { email: emailVal, password: passwordVal });
-    user.value = { 
-      token: response.token, 
-      userId: response.user_id, 
-      email: response.email 
-    };
-    storeAuth(response);
+    if (redirectToken && redirectUserId && redirectEmail) {
+      const auth = {
+        token: redirectToken,
+        user_id: parseInt(redirectUserId, 10),
+        email: redirectEmail,
+      };
+      user.value = { token: auth.token, userId: auth.user_id, email: auth.email };
+      storeAuth(auth);
+      // Remove token from URL to prevent reuse on refresh
+      window.history.replaceState({}, '', '/');
+    }
   }
 
   function logout() {
@@ -63,8 +62,7 @@ export function useAuth() {
     token,
     email,
     userId,
-    login,
-    register,
+    initFromRedirect,
     logout,
   };
 }

@@ -1,15 +1,17 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { watch, onMounted } from 'vue';
 import { useAuth } from './composables/useAuth';
 import { useCurrency } from './composables/useCurrency';
 import Login from './components/Login.vue';
-import Register from './components/Register.vue';
 import Dashboard from './components/Dashboard.vue';
 import UserSettings from './components/UserSettings.vue';
 
-const { isLoggedIn, email, userId, token, logout } = useAuth();
+const { isLoggedIn, email, userId, token, logout, initFromRedirect } = useAuth();
 const { loadCurrency } = useCurrency();
-const showRegister = ref(false);
+
+onMounted(() => {
+  initFromRedirect();
+});
 
 watch(
   isLoggedIn,
@@ -34,8 +36,7 @@ watch(
     <main>
       <Dashboard v-if="isLoggedIn" />
       <div v-else class="auth-forms">
-        <Register v-if="showRegister" @switch-to-login="showRegister = false" />
-        <Login v-else @switch-to-register="showRegister = true" />
+        <Login />
       </div>
     </main>
   </div>
@@ -108,7 +109,7 @@ button:hover:not(:disabled) {
   background: #0056b3;
 }
 
-.login, .register {
+.login {
   background: white;
   padding: 24px;
   border-radius: 8px;
@@ -117,7 +118,7 @@ button:hover:not(:disabled) {
   margin: 40px auto;
 }
 
-.login h2, .register h2 {
+.login h2 {
   margin-bottom: 16px;
   color: #333;
 }
@@ -164,17 +165,6 @@ form button {
   margin-top: 8px;
 }
 
-.switch-form {
-  text-align: center;
-  margin-top: 16px;
-  color: #666;
-}
-
-.switch-form a {
-  color: #007bff;
-  text-decoration: none;
-  cursor: pointer;
-}
 
 .section-header {
   display: flex;
@@ -336,7 +326,7 @@ form button {
     gap: 8px;
   }
   
-  .login, .register {
+  .login {
     margin: 16px auto;
     padding: 16px;
   }
