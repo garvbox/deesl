@@ -1,3 +1,13 @@
+FROM node:22-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
 FROM rust:bookworm AS builder
 
 RUN apt-get update && apt-get install -y \
@@ -6,23 +16,18 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
 RUN cargo install diesel_cli --no-default-features --features postgres
 
 WORKDIR /app
 
 COPY Cargo.toml Cargo.lock ./
-COPY frontend/Cargo.toml ./frontend/
 
-RUN mkdir -p src && echo "fn main() {}" > src/main.rs && \
-    mkdir -p frontend/src && echo "" > frontend/src/lib.rs
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs
 
+# Build only dependencies - layer caching optimisation
 RUN cargo build --release
 
 COPY . .
-
-RUN cd frontend && wasm-pack build --target web --out-dir ../src/pkg --release
 
 RUN cargo build --release
 
@@ -40,7 +45,7 @@ RUN cargo install diesel_cli --no-default-features --features postgres || true
 WORKDIR /app
 
 COPY --from=builder /app/target/release/deesl /app/deesl
-COPY --from=builder /app/src/pkg /app/src/pkg
+COPY --from=frontend-builder /app/src/pkg /app/src/pkg
 COPY --from=builder /app/migrations /app/migrations
 COPY --from=builder /app/diesel.toml /app/diesel.toml
 COPY --from=builder /usr/local/cargo/bin/diesel /usr/local/bin/diesel

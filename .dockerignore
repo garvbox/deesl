@@ -5,3 +5,4 @@ target/
 .env
 .env.*
 justfile
+frontend/node_modules/

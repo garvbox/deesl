@@ -18,6 +18,7 @@ services:
 
   app:
     build: .
+    container_name: app
     environment:
       DATABASE_URL: postgres://postgres:postgres@db:5432/deesl
       HOST: 0.0.0.0
