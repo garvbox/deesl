@@ -221,10 +221,7 @@ pub async fn create_vehicle(
             )
         })?;
 
-    Ok((
-        StatusCode::CREATED,
-        Json(VehicleResponse::from(vehicle)),
-    ))
+    Ok((StatusCode::CREATED, Json(VehicleResponse::from(vehicle))))
 }
 
 #[cfg(test)]
