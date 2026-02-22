@@ -14,6 +14,19 @@ const { token } = useAuth();
 const showConfirm = ref(false);
 const deleting = ref(false);
 
+const dateFormatter = new Intl.DateTimeFormat(undefined, {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+function formatDate(isoString) {
+  // Backend returns naive datetime without timezone; treat as UTC
+  return dateFormatter.format(new Date(isoString + 'Z'));
+}
+
 async function handleDelete() {
   deleting.value = true;
   try {
@@ -29,7 +42,7 @@ async function handleDelete() {
   <li class="entry-item">
     <div class="entry-info">
       <span v-if="showVehicle" class="vehicle">{{ entry.vehicle_make }} {{ entry.vehicle_model }}</span>
-      <span class="date">{{ entry.filled_at }}</span>
+      <span class="date">{{ formatDate(entry.filled_at) }}</span>
       <span class="mileage">{{ entry.mileage_km }} km</span>
       <span class="litres">{{ entry.litres }} L</span>
       <span class="cost">${{ entry.cost }}</span>
