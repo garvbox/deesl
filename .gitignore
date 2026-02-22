@@ -9,6 +9,6 @@ target/
 .env*
 **/.diesel_lock
 
-# Frontend build output
-src/pkg/
+# Frontend build output — keep stub index.html, ignore built assets
+src/pkg/assets/
 **/node_modules/
