@@ -457,19 +457,23 @@ pub async fn create_fuel_entry(
     let mileage_km = payload.mileage_km;
     let litres = payload.litres;
     let cost = payload.cost;
-    
+
     // Parse ISO 8601 datetime string into NaiveDateTime
     let filled_at: Option<chrono::NaiveDateTime> = match payload.filled_at {
         Some(ref dt_str) if !dt_str.is_empty() => {
             // Try to parse as DateTime<Utc> (with timezone) first, then convert to naive
-            dt_str.parse::<chrono::DateTime<chrono::Utc>>()
+            dt_str
+                .parse::<chrono::DateTime<chrono::Utc>>()
                 .map(|dt| dt.naive_utc())
                 .or_else(|_| {
                     // Fall back to parsing as NaiveDateTime directly
                     dt_str.parse::<chrono::NaiveDateTime>()
                 })
                 .map_err(|_| {
-                    (StatusCode::BAD_REQUEST, format!("Invalid datetime format: {}", dt_str))
+                    (
+                        StatusCode::BAD_REQUEST,
+                        format!("Invalid datetime format: {}", dt_str),
+                    )
                 })?
                 .into()
         }
