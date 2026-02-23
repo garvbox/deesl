@@ -6,13 +6,14 @@ import { useAuth } from '../composables/useAuth';
 const props = defineProps({
   vehicles: Array,
   stations: Array,
+  defaultVehicleId: Number,
 });
 
 const emit = defineEmits(['success']);
 
 const { token } = useAuth();
 
-const selectedVehicleId = ref('');
+const selectedVehicleId = ref(props.defaultVehicleId ? props.defaultVehicleId.toString() : '');
 const stationQuery = ref('');
 const selectedStationId = ref(null);
 const mileage = ref('');
