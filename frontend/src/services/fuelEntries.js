@@ -8,14 +8,14 @@ export async function listRecentFuelEntries(userId, token, limit = 10) {
   return apiGet(`/fuel-entries?user_id=${userId}&limit=${limit}`, token);
 }
 
-export async function createFuelEntry(vehicleId, stationId, mileage, litres, cost, token) {
+export async function createFuelEntry(vehicleId, stationId, mileage, litres, cost, token, filledAt = null) {
   return apiPost('/fuel-entries', {
     vehicle_id: vehicleId,
     station_id: stationId,
     mileage_km: mileage,
     litres,
     cost,
-    filled_at: null,
+    filled_at: filledAt,
   }, token);
 }
 
