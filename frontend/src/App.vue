@@ -5,6 +5,7 @@ import { useAuth } from './composables/useAuth';
 import { useCurrency } from './composables/useCurrency';
 import Login from './components/Login.vue';
 import UserSettings from './components/UserSettings.vue';
+import AppFooter from './components/AppFooter.vue';
 
 const { isLoggedIn, email, userId, token, logout, initFromRedirect } = useAuth();
 const { loadCurrency } = useCurrency();
@@ -43,6 +44,7 @@ watch(
         <Login />
       </div>
     </main>
+    <AppFooter />
   </div>
 </template>
 

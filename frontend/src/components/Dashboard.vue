@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useAuth } from '../composables/useAuth';
 import { listVehicles } from '../services/vehicles';
 import { listFuelStations, listRecentFuelEntries } from '../services/fuelEntries';
@@ -14,6 +14,11 @@ const recentEntries = ref([]);
 const loading = ref(true);
 const error = ref('');
 const showQuickAdd = ref(false);
+
+const lastUsedVehicleId = computed(() => {
+  if (recentEntries.value.length === 0) return null;
+  return recentEntries.value[0].vehicle_id;
+});
 
 async function loadData() {
   try {
@@ -62,6 +67,7 @@ onMounted(loadData);
           v-if="showQuickAdd"
           :vehicles="vehicles"
           :stations="stations"
+          :default-vehicle-id="lastUsedVehicleId || (vehicles.length > 0 ? vehicles[0].id : null)"
           @success="showQuickAdd = false; loadRecentEntries()"
         />
 

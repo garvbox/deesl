@@ -17,6 +17,7 @@ const selectedStationId = ref(null);
 const mileage = ref('');
 const litres = ref('');
 const cost = ref('');
+const filledAt = ref(new Date().toISOString().slice(0, 16));
 const error = ref('');
 const loading = ref(false);
 const showDropdown = ref(false);
@@ -54,13 +55,15 @@ async function handleSubmit() {
       mileageVal,
       litresVal,
       costVal,
-      token.value
+      token.value,
+      filledAt.value ? new Date(filledAt.value).toISOString() : null
     );
     mileage.value = '';
     litres.value = '';
     cost.value = '';
     stationQuery.value = '';
     selectedStationId.value = null;
+    filledAt.value = new Date().toISOString().slice(0, 16);
     emit('success');
   } catch (e) {
     error.value = e.message;
@@ -107,6 +110,10 @@ function hideDropdown() {
     <label>
       <span>Cost</span>
       <input type="number" step="0.01" v-model="cost" placeholder="Total cost" :disabled="loading" />
+    </label>
+    <label>
+      <span>Date/Time (optional)</span>
+      <input type="datetime-local" v-model="filledAt" :disabled="loading" />
     </label>
     <button type="submit" :disabled="loading">
       {{ loading ? 'Saving...' : 'Add Entry' }}

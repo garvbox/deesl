@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue';
+import router from '../router';
 
 const user = ref(getStoredAuth());
 
@@ -38,6 +39,16 @@ export function useAuth() {
     const redirectUserId = params.get('user_id');
     const redirectEmail = params.get('email');
 
+    // Check if these exact params were already processed (prevents re-login on refresh after logout)
+    const processedToken = sessionStorage.getItem('oauth_processed_token');
+    if (processedToken && processedToken === redirectToken) {
+      // Already processed these params, clean URL if needed and return
+      if (redirectToken) {
+        router.replace({ path: '/', query: {} });
+      }
+      return;
+    }
+
     if (redirectToken && redirectUserId && redirectEmail) {
       const auth = {
         token: redirectToken,
@@ -46,14 +57,23 @@ export function useAuth() {
       };
       user.value = { token: auth.token, userId: auth.user_id, email: auth.email };
       storeAuth(auth);
-      // Remove token from URL to prevent reuse on refresh
-      window.history.replaceState({}, '', '/');
+      // Mark these params as processed
+      sessionStorage.setItem('oauth_processed_token', redirectToken);
+      // Remove token from URL to prevent reuse on refresh - use router.replace for proper cleanup
+      router.replace({ path: '/', query: {} });
     }
   }
 
   function logout() {
     user.value = null;
     clearAuth();
+    // Clear the processed token flag so a fresh login will work
+    sessionStorage.removeItem('oauth_processed_token');
+    // Clean URL of any token params that might be present
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('token')) {
+      router.replace({ path: '/', query: {} });
+    }
   }
 
   return {

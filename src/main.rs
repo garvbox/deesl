@@ -31,6 +31,11 @@ async fn serve_openapi() -> axum::response::Json<String> {
     axum::response::Json(api_doc::ApiDoc::openapi().to_json().unwrap())
 }
 
+async fn serve_version() -> axum::response::Json<serde_json::Value> {
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
+    axum::response::Json(serde_json::json!({ "version": VERSION }))
+}
+
 async fn serve_index() -> impl axum::response::IntoResponse {
     axum::response::Html(include_str!("pkg/index.html"))
 }
@@ -101,6 +106,7 @@ async fn main() {
     };
 
     let mut app = Router::new()
+        .route("/api/version", get(serve_version))
         .route("/api/openapi.json", get(serve_openapi))
         .merge(oauth_handlers::router())
         .merge(user_handlers::router())
