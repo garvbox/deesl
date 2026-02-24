@@ -97,7 +97,19 @@ async fn main() {
     tracing_subscriber::fmt::init();
     let _ = dotenvy::dotenv();
     let config = Config::new();
+    let app = get_app(&config);
 
+    let bind_address = format!("{}:{}", config.host, config.port);
+    info!("Starting server on http://{bind_address}");
+    let listener = TcpListener::bind(bind_address)
+        .await
+        .expect("Failed to bind listener");
+    axum::serve(listener, app)
+        .await
+        .expect("Failed to start axum server");
+}
+
+fn get_app(config: &Config) -> Router {
     let manager = Manager::new(&config.database_url, deadpool_diesel::Runtime::Tokio1);
     let pool = Pool::builder(manager).build().unwrap();
     let app_state = AppState {
@@ -127,15 +139,7 @@ async fn main() {
         let security_headers = build_security_headers();
         app = app.layer(cors).layer(security_headers);
     }
-
-    let bind_address = format!("{}:{}", config.host, config.port);
-    info!("Starting server on http://{bind_address}");
-    let listener = TcpListener::bind(bind_address)
-        .await
-        .expect("Failed to bind listener");
-    axum::serve(listener, app)
-        .await
-        .expect("Failed to start axum server");
+    app
 }
 
 fn build_production_cors(origins: &[String]) -> CorsLayer {
@@ -179,6 +183,8 @@ fn build_security_headers() -> SecurityHeadersLayer {
 
 #[cfg(test)]
 mod tests {
+    use axum_test::TestServer;
+
     use super::*;
 
     // --- Config::is_development ---
@@ -229,5 +235,15 @@ mod tests {
         // Invalid origins are filtered out by `filter_map(|o| o.parse().ok())`
         let origins = vec!["not a valid origin".to_string()];
         let _layer = build_production_cors(&origins);
+    }
+
+    #[tokio::test]
+    async fn test_unauthenticated_request_returns_401() {
+        let test_config = Config::new();
+        let app = get_app(&test_config);
+        let server = TestServer::new(app).unwrap();
+
+        let response = server.get("/").await;
+        response.assert_status_unauthorized();
     }
 }
