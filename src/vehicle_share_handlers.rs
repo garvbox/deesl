@@ -9,10 +9,9 @@ use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
 
 use crate::AppState;
-use crate::auth::AuthConfig;
+use crate::auth::extract_auth_user;
 use crate::handlers::internal_error;
 use crate::models::{NewVehicleShare, User, VehicleShare};
-use crate::oauth_handlers::extract_cookie;
 use crate::schema::{users, vehicle_shares, vehicles};
 
 pub fn router() -> Router<AppState> {
@@ -23,28 +22,6 @@ pub fn router() -> Router<AppState> {
         )
         .route("/api/vehicle-shares/{id}", delete(delete_share))
         .route("/api/vehicle-shares/owned", get(list_owned_vehicle_shares))
-}
-
-#[derive(Debug, Clone)]
-pub struct AuthUser {
-    pub user_id: i32,
-    #[allow(dead_code)]
-    pub email: String,
-}
-
-fn extract_auth_user(headers: &HeaderMap) -> Result<AuthUser, (StatusCode, String)> {
-    let token = extract_cookie(headers, "auth_token")
-        .ok_or((StatusCode::UNAUTHORIZED, "Missing auth token".to_string()))?;
-
-    let auth_config = AuthConfig::new();
-    let claims = auth_config
-        .validate_token(&token)
-        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
-
-    Ok(AuthUser {
-        user_id: claims.user_id,
-        email: claims.sub,
-    })
 }
 
 #[derive(serde::Serialize)]

@@ -10,10 +10,9 @@ use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
-use crate::auth::AuthConfig;
+use crate::auth::extract_auth_user;
 use crate::handlers::internal_error;
 use crate::models::User;
-use crate::oauth_handlers::extract_cookie;
 use crate::schema::users;
 
 pub fn router() -> Router<AppState> {
@@ -37,27 +36,19 @@ impl From<User> for UserProfileResponse {
     }
 }
 
-fn extract_user_id(headers: &HeaderMap) -> Result<i32, (StatusCode, String)> {
-    let token = extract_cookie(headers, "auth_token")
-        .ok_or((StatusCode::UNAUTHORIZED, "Missing auth token".to_string()))?;
-
-    let auth_config = AuthConfig::new();
-    let claims = auth_config
-        .validate_token(&token)
-        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
-
-    Ok(claims.user_id)
-}
-
 pub async fn get_me(
     State(pool): State<Pool>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let user_id = extract_user_id(&headers)?;
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
 
     let user: User = conn
-        .interact(move |conn| users::table.filter(users::id.eq(user_id)).first(conn))
+        .interact(move |conn| {
+            users::table
+                .filter(users::id.eq(auth_user.user_id))
+                .first(conn)
+        })
         .await
         .map_err(internal_error)?
         .map_err(|_| (StatusCode::NOT_FOUND, "User not found".to_string()))?;
@@ -94,13 +85,13 @@ pub async fn update_me(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     validate_currency(&payload.currency)?;
 
-    let user_id = extract_user_id(&headers)?;
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
     let currency = payload.currency.clone();
 
     let user: User = conn
         .interact(move |conn| {
-            diesel::update(users::table.filter(users::id.eq(user_id)))
+            diesel::update(users::table.filter(users::id.eq(auth_user.user_id)))
                 .set(users::currency.eq(currency))
                 .returning(User::as_returning())
                 .get_result(conn)

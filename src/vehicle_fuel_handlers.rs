@@ -10,33 +10,10 @@ use diesel::prelude::*;
 use serde::Deserialize;
 
 use crate::AppState;
-use crate::auth::AuthConfig;
+use crate::auth::extract_auth_user;
 use crate::handlers::internal_error;
 use crate::models::{FuelEntry, FuelStation, NewFuelEntry, NewFuelStation, NewVehicle, Vehicle};
-use crate::oauth_handlers::extract_cookie;
 use crate::schema::{fuel_entries, fuel_stations, vehicle_shares, vehicles};
-
-#[derive(Debug, Clone)]
-pub struct AuthUser {
-    pub user_id: i32,
-    #[allow(dead_code)]
-    pub email: String,
-}
-
-fn extract_auth_user(headers: &HeaderMap) -> Result<AuthUser, (StatusCode, String)> {
-    let token = extract_cookie(headers, "auth_token")
-        .ok_or((StatusCode::UNAUTHORIZED, "Missing auth token".to_string()))?;
-
-    let auth_config = AuthConfig::new();
-    let claims = auth_config
-        .validate_token(&token)
-        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
-
-    Ok(AuthUser {
-        user_id: claims.user_id,
-        email: claims.sub,
-    })
-}
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -83,7 +60,11 @@ pub async fn list_fuel_stations(
     let stations: Vec<FuelStation> = conn
         .interact(move |conn| {
             fuel_stations::table
-                .filter(fuel_stations::user_id.eq(user_id))
+                .filter(
+                    fuel_stations::user_id
+                        .eq(user_id)
+                        .or(fuel_stations::user_id.is_null()),
+                )
                 .order(fuel_stations::name)
                 .load(conn)
         })
@@ -155,12 +136,16 @@ pub async fn delete_fuel_station(
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = auth_user.user_id;
 
-    // Verify ownership before deleting
+    // Verify ownership before deleting (allow deleting own stations or legacy stations with NULL user_id)
     let is_owner: bool = conn
         .interact(move |conn| {
             fuel_stations::table
                 .filter(fuel_stations::id.eq(id))
-                .filter(fuel_stations::user_id.eq(user_id))
+                .filter(
+                    fuel_stations::user_id
+                        .eq(user_id)
+                        .or(fuel_stations::user_id.is_null()),
+                )
                 .first::<FuelStation>(conn)
                 .optional()
         })

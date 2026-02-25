@@ -1,5 +1,8 @@
+use axum::http::{HeaderMap, StatusCode};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
+
+use crate::oauth_handlers::extract_cookie;
 
 pub const JWT_SECRET_KEY: &str = "JWT_SECRET";
 pub const JWT_EXPIRATION_HOURS: i64 = 24 * 7;
@@ -57,6 +60,28 @@ impl AuthConfig {
         )
         .map(|data| data.claims)
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct AuthUser {
+    pub user_id: i32,
+    #[allow(dead_code)]
+    pub email: String,
+}
+
+pub fn extract_auth_user(headers: &HeaderMap) -> Result<AuthUser, (StatusCode, String)> {
+    let token = extract_cookie(headers, "auth_token")
+        .ok_or((StatusCode::UNAUTHORIZED, "Missing auth token".to_string()))?;
+
+    let auth_config = AuthConfig::new();
+    let claims = auth_config
+        .validate_token(&token)
+        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
+
+    Ok(AuthUser {
+        user_id: claims.user_id,
+        email: claims.sub,
+    })
 }
 
 #[cfg(test)]

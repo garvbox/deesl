@@ -22,6 +22,26 @@ use crate::state::AppState;
 
 const CSRF_COOKIE: &str = "oauth_csrf";
 
+fn is_development() -> bool {
+    env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()) == "development"
+}
+
+fn build_cookie(name: &str, value: &str, max_age: i64) -> String {
+    let secure_flag = if is_development() { "" } else { "; Secure" };
+    format!(
+        "{}={}; HttpOnly; SameSite=Lax{}; Path=/; Max-Age={}",
+        name, value, secure_flag, max_age
+    )
+}
+
+fn build_clear_cookie(name: &str) -> String {
+    let secure_flag = if is_development() { "" } else { "; Secure" };
+    format!(
+        "{}=; HttpOnly; SameSite=Lax{}; Path=/; Max-Age=0",
+        name, secure_flag
+    )
+}
+
 #[derive(Clone)]
 pub struct OAuthConfig {
     pub client: BasicClient,
@@ -67,11 +87,7 @@ pub async fn google_login(State(state): State<AppState>) -> impl IntoResponse {
         .add_scope(Scope::new("email".to_string()))
         .url();
 
-    let cookie = format!(
-        "{}={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600",
-        CSRF_COOKIE,
-        csrf_token.secret()
-    );
+    let cookie = build_cookie(CSRF_COOKIE, csrf_token.secret(), 600);
 
     let mut headers = HeaderMap::new();
     headers.insert(header::SET_COOKIE, cookie.parse().unwrap());
@@ -188,14 +204,8 @@ pub async fn google_callback(
         })?;
 
     // Clear CSRF cookie and set auth cookie with JWT
-    let clear_csrf_cookie = format!(
-        "{}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0",
-        CSRF_COOKIE
-    );
-    let auth_cookie = format!(
-        "auth_token={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800",
-        jwt
-    );
+    let clear_csrf_cookie = build_clear_cookie(CSRF_COOKIE);
+    let auth_cookie = build_cookie("auth_token", &jwt, 604800);
 
     let mut resp_headers = HeaderMap::new();
     resp_headers.insert(header::SET_COOKIE, clear_csrf_cookie.parse().unwrap());
@@ -228,7 +238,7 @@ pub async fn get_current_user(
 }
 
 pub async fn logout() -> impl IntoResponse {
-    let clear_cookie = "auth_token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
+    let clear_cookie = build_clear_cookie("auth_token");
     let mut resp_headers = HeaderMap::new();
     resp_headers.insert(header::SET_COOKIE, clear_cookie.parse().unwrap());
     (StatusCode::OK, resp_headers, "Logged out successfully")
