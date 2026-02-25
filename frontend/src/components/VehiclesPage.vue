@@ -7,7 +7,7 @@ import VehicleItem from './VehicleItem.vue';
 import AddVehicleForm from './AddVehicleForm.vue';
 import FuelEntrySection from './FuelEntrySection.vue';
 
-const { token, userId } = useAuth();
+const { token } = useAuth();
 
 const vehicles = ref([]);
 const stations = ref([]);
@@ -19,7 +19,7 @@ const selectedVehicle = ref(null);
 async function loadData() {
   try {
     const [v, s] = await Promise.all([
-      listVehicles(userId.value, token.value),
+      listVehicles(token.value),
       listFuelStations(token.value),
     ]);
     vehicles.value = v;
@@ -60,6 +60,7 @@ onMounted(loadData);
             :vehicle="vehicle"
             @delete="loadData"
             @select="selectedVehicle = $event"
+            @share="loadData"
           />
         </ul>
 

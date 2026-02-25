@@ -24,6 +24,7 @@ mod schema;
 mod state;
 mod user_handlers;
 mod vehicle_fuel_handlers;
+mod vehicle_share_handlers;
 
 pub use state::AppState;
 
@@ -111,6 +112,7 @@ async fn main() {
         .merge(oauth_handlers::router())
         .merge(user_handlers::router())
         .merge(vehicle_fuel_handlers::router())
+        .merge(vehicle_share_handlers::router())
         .nest_service("/assets", ServeDir::new("src/pkg/assets"))
         .fallback(serve_index)
         .layer(TraceLayer::new_for_http())

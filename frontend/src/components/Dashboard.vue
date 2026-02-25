@@ -6,7 +6,7 @@ import { listFuelStations, listRecentFuelEntries } from '../services/fuelEntries
 import FuelEntryItem from './FuelEntryItem.vue';
 import QuickAddFuelForm from './QuickAddFuelForm.vue';
 
-const { token, userId } = useAuth();
+const { token } = useAuth();
 
 const vehicles = ref([]);
 const stations = ref([]);
@@ -23,9 +23,9 @@ const lastUsedVehicleId = computed(() => {
 async function loadData() {
   try {
     const [v, s, entries] = await Promise.all([
-      listVehicles(userId.value, token.value),
+      listVehicles(token.value),
       listFuelStations(token.value),
-      listRecentFuelEntries(userId.value, token.value),
+      listRecentFuelEntries(token.value),
     ]);
     vehicles.value = v;
     stations.value = s;
@@ -38,9 +38,9 @@ async function loadData() {
 }
 
 async function loadRecentEntries() {
-  if (!userId.value) return;
+  if (!token.value) return;
   try {
-    recentEntries.value = await listRecentFuelEntries(userId.value, token.value);
+    recentEntries.value = await listRecentFuelEntries(token.value);
   } catch (e) {
     console.error('Failed to load recent entries:', e);
   }
