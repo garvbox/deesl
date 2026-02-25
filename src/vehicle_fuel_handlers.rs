@@ -76,11 +76,17 @@ pub async fn list_fuel_stations(
     State(pool): State<Pool>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    // Verify user is authenticated
-    let _auth_user = extract_auth_user(&headers)?;
+    // Verify user is authenticated and get user_id
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = auth_user.user_id;
     let stations: Vec<FuelStation> = conn
-        .interact(|conn| fuel_stations::table.order(fuel_stations::name).load(conn))
+        .interact(move |conn| {
+            fuel_stations::table
+                .filter(fuel_stations::user_id.eq(user_id))
+                .order(fuel_stations::name)
+                .load(conn)
+        })
         .await
         .map_err(internal_error)?
         .map_err(|e| {
@@ -108,15 +114,19 @@ pub async fn create_fuel_station(
     headers: HeaderMap,
     Json(payload): Json<CreateFuelStationRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    // Verify user is authenticated
-    let _auth_user = extract_auth_user(&headers)?;
+    // Verify user is authenticated and get user_id
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
     let name = payload.name.clone();
+    let user_id = auth_user.user_id;
 
     let station = conn
         .interact(move |conn| {
             diesel::insert_into(fuel_stations::table)
-                .values(NewFuelStation { name })
+                .values(NewFuelStation {
+                    name,
+                    user_id: Some(user_id),
+                })
                 .returning(FuelStation::as_returning())
                 .get_result(conn)
         })
@@ -140,9 +150,37 @@ pub async fn delete_fuel_station(
     headers: HeaderMap,
     axum::extract::Path(id): axum::extract::Path<i32>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    // Verify user is authenticated
-    let _auth_user = extract_auth_user(&headers)?;
+    // Verify user is authenticated and get user_id
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = auth_user.user_id;
+
+    // Verify ownership before deleting
+    let is_owner: bool = conn
+        .interact(move |conn| {
+            fuel_stations::table
+                .filter(fuel_stations::id.eq(id))
+                .filter(fuel_stations::user_id.eq(user_id))
+                .first::<FuelStation>(conn)
+                .optional()
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("DB error: {}", e),
+            )
+        })?
+        .map(|_| true)
+        .unwrap_or(false);
+
+    if !is_owner {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "You don't own this fuel station".to_string(),
+        ));
+    }
 
     conn.interact(move |conn| {
         diesel::delete(fuel_stations::table.filter(fuel_stations::id.eq(id))).execute(conn)
@@ -740,6 +778,7 @@ mod tests {
             id,
             name: name.to_string(),
             created_at: epoch(),
+            user_id: Some(1),
         }
     }
 

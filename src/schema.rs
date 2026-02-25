@@ -18,6 +18,7 @@ diesel::table! {
         id -> Int4,
         name -> Text,
         created_at -> Timestamp,
+        user_id -> Nullable<Int4>,
     }
 }
 
@@ -55,6 +56,7 @@ diesel::table! {
 
 diesel::joinable!(fuel_entries -> fuel_stations (station_id));
 diesel::joinable!(fuel_entries -> vehicles (vehicle_id));
+diesel::joinable!(fuel_stations -> users (user_id));
 diesel::joinable!(vehicle_shares -> users (shared_with_user_id));
 diesel::joinable!(vehicle_shares -> vehicles (vehicle_id));
 diesel::joinable!(vehicles -> users (owner_id));

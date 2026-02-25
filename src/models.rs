@@ -42,6 +42,7 @@ pub struct FuelStation {
     pub id: i32,
     pub name: String,
     pub created_at: NaiveDateTime,
+    pub user_id: Option<i32>,
 }
 
 #[derive(Insertable, serde::Deserialize)]
@@ -49,6 +50,7 @@ pub struct FuelStation {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewFuelStation {
     pub name: String,
+    pub user_id: Option<i32>,
 }
 
 #[derive(Queryable, Selectable, serde::Serialize)]
