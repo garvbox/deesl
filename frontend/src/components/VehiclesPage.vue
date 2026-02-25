@@ -1,13 +1,10 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useAuth } from '../composables/useAuth';
 import { listVehicles } from '../services/vehicles';
 import { listFuelStations } from '../services/fuelEntries';
 import VehicleItem from './VehicleItem.vue';
 import AddVehicleForm from './AddVehicleForm.vue';
 import FuelEntrySection from './FuelEntrySection.vue';
-
-const { token } = useAuth();
 
 const vehicles = ref([]);
 const stations = ref([]);
@@ -19,8 +16,8 @@ const selectedVehicle = ref(null);
 async function loadData() {
   try {
     const [v, s] = await Promise.all([
-      listVehicles(token.value),
-      listFuelStations(token.value),
+      listVehicles(),
+      listFuelStations(),
     ]);
     vehicles.value = v;
     stations.value = s;

@@ -1,11 +1,8 @@
 <script setup>
 import { ref } from 'vue';
 import { createVehicle } from '../services/vehicles';
-import { useAuth } from '../composables/useAuth';
 
 const emit = defineEmits(['success']);
-
-const { token } = useAuth();
 
 const make = ref('');
 const model = ref('');
@@ -23,7 +20,7 @@ async function handleSubmit() {
   error.value = '';
 
   try {
-    await createVehicle(make.value, model.value, registration.value, token.value);
+    await createVehicle(make.value, model.value, registration.value);
     make.value = '';
     model.value = '';
     registration.value = '';

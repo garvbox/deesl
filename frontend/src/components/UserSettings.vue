@@ -1,9 +1,7 @@
 <script setup>
 import { ref } from 'vue';
-import { useAuth } from '../composables/useAuth';
 import { useCurrency } from '../composables/useCurrency';
 
-const { userId, token } = useAuth();
 const { currency, supportedCurrencies, saveCurrency } = useCurrency();
 
 const saving = ref(false);
@@ -13,7 +11,7 @@ async function handleCurrencyChange(event) {
   saving.value = true;
   error.value = null;
   try {
-    await saveCurrency(event.target.value, userId.value, token.value);
+    await saveCurrency(event.target.value);
   } catch (e) {
     error.value = e.message;
   } finally {

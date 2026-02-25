@@ -1,11 +1,19 @@
-use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
+use axum::{
+    Json, Router,
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+    routing::get,
+};
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
+use crate::auth::AuthConfig;
 use crate::handlers::internal_error;
 use crate::models::User;
+use crate::oauth_handlers::extract_cookie;
 use crate::schema::users;
 
 pub fn router() -> Router<AppState> {
@@ -29,17 +37,24 @@ impl From<User> for UserProfileResponse {
     }
 }
 
-#[derive(Deserialize)]
-pub struct UserQueryParams {
-    pub user_id: i32,
+fn extract_user_id(headers: &HeaderMap) -> Result<i32, (StatusCode, String)> {
+    let token = extract_cookie(headers, "auth_token")
+        .ok_or((StatusCode::UNAUTHORIZED, "Missing auth token".to_string()))?;
+
+    let auth_config = AuthConfig::new();
+    let claims = auth_config
+        .validate_token(&token)
+        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
+
+    Ok(claims.user_id)
 }
 
 pub async fn get_me(
     State(pool): State<Pool>,
-    axum::extract::Query(params): axum::extract::Query<UserQueryParams>,
+    headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let user_id = extract_user_id(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
-    let user_id = params.user_id;
 
     let user: User = conn
         .interact(move |conn| users::table.filter(users::id.eq(user_id)).first(conn))
@@ -74,13 +89,13 @@ pub(crate) fn validate_currency(currency: &str) -> Result<(), (StatusCode, Strin
 
 pub async fn update_me(
     State(pool): State<Pool>,
-    axum::extract::Query(params): axum::extract::Query<UserQueryParams>,
+    headers: HeaderMap,
     Json(payload): Json<UpdateProfileRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     validate_currency(&payload.currency)?;
 
+    let user_id = extract_user_id(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
-    let user_id = params.user_id;
     let currency = payload.currency.clone();
 
     let user: User = conn

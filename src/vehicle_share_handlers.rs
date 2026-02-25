@@ -1,13 +1,9 @@
 use axum::{
     Json, Router,
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{delete, get},
-};
-use axum_extra::{
-    TypedHeader,
-    headers::{Authorization, authorization::Bearer},
 };
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
@@ -16,6 +12,7 @@ use crate::AppState;
 use crate::auth::AuthConfig;
 use crate::handlers::internal_error;
 use crate::models::{NewVehicleShare, User, VehicleShare};
+use crate::oauth_handlers::extract_cookie;
 use crate::schema::{users, vehicle_shares, vehicles};
 
 pub fn router() -> Router<AppState> {
@@ -34,12 +31,13 @@ pub struct AuthUser {
     pub email: String,
 }
 
-fn extract_auth_user(
-    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
-) -> Result<AuthUser, (StatusCode, String)> {
+fn extract_auth_user(headers: &HeaderMap) -> Result<AuthUser, (StatusCode, String)> {
+    let token = extract_cookie(headers, "auth_token")
+        .ok_or((StatusCode::UNAUTHORIZED, "Missing auth token".to_string()))?;
+
     let auth_config = AuthConfig::new();
     let claims = auth_config
-        .validate_token(bearer.token())
+        .validate_token(&token)
         .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
 
     Ok(AuthUser {
@@ -61,9 +59,9 @@ pub struct VehicleShareResponse {
 
 pub async fn list_shared_vehicles(
     State(pool): State<Pool>,
-    auth_header: TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let auth_user = extract_auth_user(auth_header)?;
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = auth_user.user_id;
 
@@ -119,10 +117,10 @@ pub struct CreateShareRequest {
 
 pub async fn create_share(
     State(pool): State<Pool>,
-    auth_header: TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
     Json(payload): Json<CreateShareRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let auth_user = extract_auth_user(auth_header)?;
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
     let owner_id = auth_user.user_id;
 
@@ -263,10 +261,10 @@ pub async fn create_share(
 
 pub async fn delete_share(
     State(pool): State<Pool>,
-    auth_header: TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
     axum::extract::Path(share_id): axum::extract::Path<i32>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let auth_user = extract_auth_user(auth_header)?;
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = auth_user.user_id;
 

@@ -1,4 +1,4 @@
-use axum::{Router, routing::get};
+use axum::{Router, http::Method, http::header, routing::get};
 use deadpool_diesel::postgres::{Manager, Pool};
 use http_security_headers::{
     ContentSecurityPolicy, CrossOriginEmbedderPolicy, CrossOriginOpenerPolicy,
@@ -8,7 +8,7 @@ use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tower_http::cors::{AllowOrigin, Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tower_livereload::LiveReloadLayer;
@@ -120,9 +120,17 @@ async fn main() {
 
     if config.is_development() {
         let cors = CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any);
+            .allow_origin(AllowOrigin::mirror_request())
+            .allow_methods([
+                Method::GET,
+                Method::POST,
+                Method::PUT,
+                Method::PATCH,
+                Method::DELETE,
+                Method::OPTIONS,
+            ])
+            .allow_headers([header::CONTENT_TYPE, header::ACCEPT, header::ORIGIN])
+            .allow_credentials(true);
         app = app.layer(cors).layer(LiveReloadLayer::new());
     } else {
         let cors = build_production_cors(&config.cors_origins);
@@ -141,14 +149,30 @@ async fn main() {
 }
 
 fn build_production_cors(origins: &[String]) -> CorsLayer {
+    let allowed_headers = [header::CONTENT_TYPE, header::ACCEPT, header::ORIGIN];
+    let allowed_methods = vec![
+        Method::GET,
+        Method::POST,
+        Method::PUT,
+        Method::PATCH,
+        Method::DELETE,
+        Method::OPTIONS,
+    ];
+
     if origins.is_empty() {
+        // When no origins specified, mirror the request origin (for flexibility)
         CorsLayer::new()
+            .allow_origin(AllowOrigin::mirror_request())
+            .allow_methods(allowed_methods)
+            .allow_headers(allowed_headers)
+            .allow_credentials(true)
     } else {
         let origins: Vec<_> = origins.iter().filter_map(|o| o.parse().ok()).collect();
         CorsLayer::new()
             .allow_origin(AllowOrigin::list(origins))
-            .allow_methods(Any)
-            .allow_headers(Any)
+            .allow_methods(allowed_methods)
+            .allow_headers(allowed_headers)
+            .allow_credentials(true)
     }
 }
 

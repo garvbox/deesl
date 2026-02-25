@@ -2,7 +2,6 @@
 import { ref } from 'vue';
 import { deleteVehicle } from '../services/vehicles';
 import { shareVehicle } from '../services/vehicleShares';
-import { useAuth } from '../composables/useAuth';
 
 const props = defineProps({
   vehicle: Object,
@@ -10,7 +9,6 @@ const props = defineProps({
 
 const emit = defineEmits(['delete', 'select', 'share']);
 
-const { token } = useAuth();
 const showConfirm = ref(false);
 const deleting = ref(false);
 const showShareForm = ref(false);
@@ -22,7 +20,7 @@ const shareError = ref('');
 async function handleDelete() {
   deleting.value = true;
   try {
-    await deleteVehicle(props.vehicle.id, token.value);
+    await deleteVehicle(props.vehicle.id);
     emit('delete');
   } catch (e) {
     console.error(e);
@@ -39,7 +37,7 @@ async function handleShare() {
   shareError.value = '';
 
   try {
-    await shareVehicle(props.vehicle.id, shareEmail.value, sharePermission.value, token.value);
+    await shareVehicle(props.vehicle.id, shareEmail.value, sharePermission.value);
     shareEmail.value = '';
     sharePermission.value = 'read';
     showShareForm.value = false;

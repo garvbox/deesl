@@ -1,7 +1,6 @@
 <script setup>
 import { ref } from 'vue';
 import { deleteFuelEntry } from '../services/fuelEntries';
-import { useAuth } from '../composables/useAuth';
 import { useCurrency } from '../composables/useCurrency';
 
 const props = defineProps({
@@ -11,7 +10,6 @@ const props = defineProps({
 
 const emit = defineEmits(['delete']);
 
-const { token } = useAuth();
 const { formatCost } = useCurrency();
 const showConfirm = ref(false);
 const deleting = ref(false);
@@ -32,7 +30,7 @@ function formatDate(isoString) {
 async function handleDelete() {
   deleting.value = true;
   try {
-    await deleteFuelEntry(props.entry.id, token.value);
+    await deleteFuelEntry(props.entry.id);
     emit('delete');
   } catch (e) {
     console.error(e);
