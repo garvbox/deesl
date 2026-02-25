@@ -22,6 +22,7 @@ pub fn router() -> Router<AppState> {
             get(list_shared_vehicles).post(create_share),
         )
         .route("/api/vehicle-shares/{id}", delete(delete_share))
+        .route("/api/vehicle-shares/owned", get(list_owned_vehicle_shares))
 }
 
 #[derive(Debug, Clone)]
@@ -101,6 +102,70 @@ pub async fn list_shared_vehicles(
                 vehicle_registration: registration,
                 owner_email,
                 permission_level: share.permission_level,
+            },
+        )
+        .collect();
+
+    Ok(Json(response))
+}
+
+#[derive(serde::Serialize)]
+pub struct OwnedVehicleShareResponse {
+    pub id: i32,
+    pub vehicle_id: i32,
+    pub vehicle_make: String,
+    pub vehicle_model: String,
+    pub vehicle_registration: String,
+    pub shared_with_email: String,
+    pub permission_level: String,
+    pub created_at: chrono::NaiveDateTime,
+}
+
+pub async fn list_owned_vehicle_shares(
+    State(pool): State<Pool>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let auth_user = extract_auth_user(&headers)?;
+    let conn = pool.get().await.map_err(internal_error)?;
+    let owner_id = auth_user.user_id;
+
+    let shares: Vec<(VehicleShare, String, String, String, String)> = conn
+        .interact(move |conn| {
+            vehicle_shares::table
+                .inner_join(vehicles::table)
+                .inner_join(users::table.on(vehicle_shares::shared_with_user_id.eq(users::id)))
+                .filter(vehicles::owner_id.eq(owner_id))
+                .select((
+                    VehicleShare::as_select(),
+                    vehicles::make,
+                    vehicles::model,
+                    vehicles::registration,
+                    users::email,
+                ))
+                .order(vehicle_shares::created_at.desc())
+                .load(conn)
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("DB error: {}", e),
+            )
+        })?;
+
+    let response: Vec<OwnedVehicleShareResponse> = shares
+        .into_iter()
+        .map(
+            |(share, make, model, registration, shared_with_email)| OwnedVehicleShareResponse {
+                id: share.id,
+                vehicle_id: share.vehicle_id,
+                vehicle_make: make,
+                vehicle_model: model,
+                vehicle_registration: registration,
+                shared_with_email,
+                permission_level: share.permission_level,
+                created_at: share.created_at,
             },
         )
         .collect();

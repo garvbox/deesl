@@ -2,12 +2,14 @@
 import { ref, onMounted } from 'vue';
 import { listVehicles } from '../services/vehicles';
 import { listFuelStations } from '../services/fuelEntries';
+import { listOwnedVehicleShares } from '../services/vehicleShares';
 import VehicleItem from './VehicleItem.vue';
 import AddVehicleForm from './AddVehicleForm.vue';
 import FuelEntrySection from './FuelEntrySection.vue';
 
 const vehicles = ref([]);
 const stations = ref([]);
+const ownedShares = ref([]);
 const loading = ref(true);
 const error = ref('');
 const showAddForm = ref(false);
@@ -15,12 +17,14 @@ const selectedVehicle = ref(null);
 
 async function loadData() {
   try {
-    const [v, s] = await Promise.all([
+    const [v, s, shares] = await Promise.all([
       listVehicles(),
       listFuelStations(),
+      listOwnedVehicleShares(),
     ]);
     vehicles.value = v;
     stations.value = s;
+    ownedShares.value = shares;
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -55,9 +59,11 @@ onMounted(loadData);
             v-for="vehicle in vehicles"
             :key="vehicle.id"
             :vehicle="vehicle"
+            :shares="ownedShares"
             @delete="loadData"
             @select="selectedVehicle = $event"
             @share="loadData"
+            @unshare="loadData"
           />
         </ul>
 

@@ -15,3 +15,7 @@ export async function shareVehicle(vehicleId, sharedWithEmail, permissionLevel) 
 export async function unshareVehicle(shareId) {
   return apiDelete(`/vehicle-shares/${shareId}`);
 }
+
+export async function listOwnedVehicleShares() {
+  return apiGet('/vehicle-shares/owned');
+}
