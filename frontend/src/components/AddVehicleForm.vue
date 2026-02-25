@@ -5,7 +5,7 @@ import { useAuth } from '../composables/useAuth';
 
 const emit = defineEmits(['success']);
 
-const { token, userId } = useAuth();
+const { token } = useAuth();
 
 const make = ref('');
 const model = ref('');
@@ -23,7 +23,7 @@ async function handleSubmit() {
   error.value = '';
 
   try {
-    await createVehicle(make.value, model.value, registration.value, userId.value, token.value);
+    await createVehicle(make.value, model.value, registration.value, token.value);
     make.value = '';
     model.value = '';
     registration.value = '';
