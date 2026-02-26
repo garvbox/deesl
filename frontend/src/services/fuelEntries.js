@@ -1,14 +1,15 @@
 import { apiGet, apiPost, apiDelete } from './api';
 
-export async function listFuelEntries(vehicleId, token) {
-  return apiGet(`/fuel-entries?vehicle_id=${vehicleId}`, token);
+export async function listFuelEntries(vehicleId) {
+  const query = vehicleId ? `?vehicle_id=${vehicleId}` : '';
+  return apiGet(`/fuel-entries${query}`);
 }
 
-export async function listRecentFuelEntries(token, limit = 10) {
-  return apiGet(`/fuel-entries?limit=${limit}`, token);
+export async function listRecentFuelEntries(limit = 10) {
+  return apiGet(`/fuel-entries?limit=${limit}`);
 }
 
-export async function createFuelEntry(vehicleId, stationId, mileage, litres, cost, token, filledAt = null) {
+export async function createFuelEntry(vehicleId, stationId, mileage, litres, cost, filledAt = null) {
   return apiPost('/fuel-entries', {
     vehicle_id: vehicleId,
     station_id: stationId,
@@ -16,13 +17,13 @@ export async function createFuelEntry(vehicleId, stationId, mileage, litres, cos
     litres,
     cost,
     filled_at: filledAt,
-  }, token);
+  });
 }
 
-export async function deleteFuelEntry(entryId, token) {
-  return apiDelete(`/fuel-entries/${entryId}`, token);
+export async function deleteFuelEntry(entryId) {
+  return apiDelete(`/fuel-entries/${entryId}`);
 }
 
-export async function listFuelStations(token) {
-  return apiGet('/fuel-stations', token);
+export async function listFuelStations() {
+  return apiGet('/fuel-stations');
 }

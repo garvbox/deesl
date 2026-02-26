@@ -1,9 +1,9 @@
 use axum::{
-    Router,
+    Json, Router,
     extract::State,
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Redirect},
-    routing::get,
+    routing::{get, post},
 };
 use diesel::prelude::*;
 use oauth2::{
@@ -21,6 +21,26 @@ use crate::schema::users;
 use crate::state::AppState;
 
 const CSRF_COOKIE: &str = "oauth_csrf";
+
+fn is_development() -> bool {
+    env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()) == "development"
+}
+
+fn build_cookie(name: &str, value: &str, max_age: i64) -> String {
+    let secure_flag = if is_development() { "" } else { "; Secure" };
+    format!(
+        "{}={}; HttpOnly; SameSite=Lax{}; Path=/; Max-Age={}",
+        name, value, secure_flag, max_age
+    )
+}
+
+fn build_clear_cookie(name: &str) -> String {
+    let secure_flag = if is_development() { "" } else { "; Secure" };
+    format!(
+        "{}=; HttpOnly; SameSite=Lax{}; Path=/; Max-Age=0",
+        name, secure_flag
+    )
+}
 
 #[derive(Clone)]
 pub struct OAuthConfig {
@@ -54,6 +74,8 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/auth/google", get(google_login))
         .route("/api/auth/google/callback", get(google_callback))
+        .route("/api/auth/me", get(get_current_user))
+        .route("/api/auth/logout", post(logout))
 }
 
 pub async fn google_login(State(state): State<AppState>) -> impl IntoResponse {
@@ -65,11 +87,7 @@ pub async fn google_login(State(state): State<AppState>) -> impl IntoResponse {
         .add_scope(Scope::new("email".to_string()))
         .url();
 
-    let cookie = format!(
-        "{}={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600",
-        CSRF_COOKIE,
-        csrf_token.secret()
-    );
+    let cookie = build_cookie(CSRF_COOKIE, csrf_token.secret(), 600);
 
     let mut headers = HeaderMap::new();
     headers.insert(header::SET_COOKIE, cookie.parse().unwrap());
@@ -185,21 +203,45 @@ pub async fn google_callback(
             )
         })?;
 
-    let clear_cookie = format!(
-        "{}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0",
-        CSRF_COOKIE
-    );
-    let redirect_url = format!(
-        "/?token={}&user_id={}&email={}",
-        jwt,
-        user.id,
-        urlencoding::encode(&user.email)
-    );
+    // Clear CSRF cookie and set auth cookie with JWT
+    let clear_csrf_cookie = build_clear_cookie(CSRF_COOKIE);
+    let auth_cookie = build_cookie("auth_token", &jwt, 604800);
 
     let mut resp_headers = HeaderMap::new();
-    resp_headers.insert(header::SET_COOKIE, clear_cookie.parse().unwrap());
+    resp_headers.insert(header::SET_COOKIE, clear_csrf_cookie.parse().unwrap());
+    resp_headers.insert(header::SET_COOKIE, auth_cookie.parse().unwrap());
 
-    Ok((resp_headers, Redirect::to(&redirect_url)))
+    Ok((resp_headers, Redirect::to("/")))
+}
+
+#[derive(serde::Serialize)]
+pub struct CurrentUserResponse {
+    pub user_id: i32,
+    pub email: String,
+}
+
+pub async fn get_current_user(
+    req_headers: HeaderMap,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let token = extract_cookie(&req_headers, "auth_token")
+        .ok_or((StatusCode::UNAUTHORIZED, "Missing auth token".to_string()))?;
+
+    let auth_config = AuthConfig::new();
+    let claims = auth_config
+        .validate_token(&token)
+        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
+
+    Ok(Json(CurrentUserResponse {
+        user_id: claims.user_id,
+        email: claims.sub,
+    }))
+}
+
+pub async fn logout() -> impl IntoResponse {
+    let clear_cookie = build_clear_cookie("auth_token");
+    let mut resp_headers = HeaderMap::new();
+    resp_headers.insert(header::SET_COOKIE, clear_cookie.parse().unwrap());
+    (StatusCode::OK, resp_headers, "Logged out successfully")
 }
 
 pub(crate) fn extract_cookie(headers: &HeaderMap, name: &str) -> Option<String> {

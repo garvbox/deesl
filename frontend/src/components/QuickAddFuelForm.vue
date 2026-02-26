@@ -1,7 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue';
 import { createFuelEntry } from '../services/fuelEntries';
-import { useAuth } from '../composables/useAuth';
 
 const props = defineProps({
   vehicles: Array,
@@ -10,8 +9,6 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['success']);
-
-const { token } = useAuth();
 
 const selectedVehicleId = ref(props.defaultVehicleId ? props.defaultVehicleId.toString() : '');
 const stationQuery = ref('');
@@ -62,7 +59,6 @@ async function handleSubmit() {
       mileageVal,
       litresVal,
       costVal,
-      token.value,
       filledAt.value ? new Date(filledAt.value).toISOString() : null
     );
     selectedVehicleId.value = '';

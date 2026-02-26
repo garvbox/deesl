@@ -1,19 +1,15 @@
 use axum::{
     Json, Router,
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{delete, get},
-};
-use axum_extra::{
-    TypedHeader,
-    headers::{Authorization, authorization::Bearer},
 };
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
 
 use crate::AppState;
-use crate::auth::AuthConfig;
+use crate::auth::extract_auth_user;
 use crate::handlers::internal_error;
 use crate::models::{NewVehicleShare, User, VehicleShare};
 use crate::schema::{users, vehicle_shares, vehicles};
@@ -25,27 +21,7 @@ pub fn router() -> Router<AppState> {
             get(list_shared_vehicles).post(create_share),
         )
         .route("/api/vehicle-shares/{id}", delete(delete_share))
-}
-
-#[derive(Debug, Clone)]
-pub struct AuthUser {
-    pub user_id: i32,
-    #[allow(dead_code)]
-    pub email: String,
-}
-
-fn extract_auth_user(
-    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
-) -> Result<AuthUser, (StatusCode, String)> {
-    let auth_config = AuthConfig::new();
-    let claims = auth_config
-        .validate_token(bearer.token())
-        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
-
-    Ok(AuthUser {
-        user_id: claims.user_id,
-        email: claims.sub,
-    })
+        .route("/api/vehicle-shares/owned", get(list_owned_vehicle_shares))
 }
 
 #[derive(serde::Serialize)]
@@ -61,9 +37,9 @@ pub struct VehicleShareResponse {
 
 pub async fn list_shared_vehicles(
     State(pool): State<Pool>,
-    auth_header: TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let auth_user = extract_auth_user(auth_header)?;
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = auth_user.user_id;
 
@@ -110,6 +86,70 @@ pub async fn list_shared_vehicles(
     Ok(Json(response))
 }
 
+#[derive(serde::Serialize)]
+pub struct OwnedVehicleShareResponse {
+    pub id: i32,
+    pub vehicle_id: i32,
+    pub vehicle_make: String,
+    pub vehicle_model: String,
+    pub vehicle_registration: String,
+    pub shared_with_email: String,
+    pub permission_level: String,
+    pub created_at: chrono::NaiveDateTime,
+}
+
+pub async fn list_owned_vehicle_shares(
+    State(pool): State<Pool>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let auth_user = extract_auth_user(&headers)?;
+    let conn = pool.get().await.map_err(internal_error)?;
+    let owner_id = auth_user.user_id;
+
+    let shares: Vec<(VehicleShare, String, String, String, String)> = conn
+        .interact(move |conn| {
+            vehicle_shares::table
+                .inner_join(vehicles::table)
+                .inner_join(users::table.on(vehicle_shares::shared_with_user_id.eq(users::id)))
+                .filter(vehicles::owner_id.eq(owner_id))
+                .select((
+                    VehicleShare::as_select(),
+                    vehicles::make,
+                    vehicles::model,
+                    vehicles::registration,
+                    users::email,
+                ))
+                .order(vehicle_shares::created_at.desc())
+                .load(conn)
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("DB error: {}", e),
+            )
+        })?;
+
+    let response: Vec<OwnedVehicleShareResponse> = shares
+        .into_iter()
+        .map(
+            |(share, make, model, registration, shared_with_email)| OwnedVehicleShareResponse {
+                id: share.id,
+                vehicle_id: share.vehicle_id,
+                vehicle_make: make,
+                vehicle_model: model,
+                vehicle_registration: registration,
+                shared_with_email,
+                permission_level: share.permission_level,
+                created_at: share.created_at,
+            },
+        )
+        .collect();
+
+    Ok(Json(response))
+}
+
 #[derive(serde::Deserialize)]
 pub struct CreateShareRequest {
     pub vehicle_id: i32,
@@ -119,10 +159,10 @@ pub struct CreateShareRequest {
 
 pub async fn create_share(
     State(pool): State<Pool>,
-    auth_header: TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
     Json(payload): Json<CreateShareRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let auth_user = extract_auth_user(auth_header)?;
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
     let owner_id = auth_user.user_id;
 
@@ -263,10 +303,10 @@ pub async fn create_share(
 
 pub async fn delete_share(
     State(pool): State<Pool>,
-    auth_header: TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
     axum::extract::Path(share_id): axum::extract::Path<i32>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let auth_user = extract_auth_user(auth_header)?;
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = auth_user.user_id;
 

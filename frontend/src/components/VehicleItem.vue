@@ -1,16 +1,22 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { deleteVehicle } from '../services/vehicles';
-import { shareVehicle } from '../services/vehicleShares';
-import { useAuth } from '../composables/useAuth';
+import { shareVehicle, unshareVehicle } from '../services/vehicleShares';
 
 const props = defineProps({
   vehicle: Object,
+  shares: {
+    type: Array,
+    default: () => []
+  },
 });
 
-const emit = defineEmits(['delete', 'select', 'share']);
+const emit = defineEmits(['delete', 'select', 'share', 'unshare']);
 
-const { token } = useAuth();
+const vehicleShares = computed(() => {
+  return props.shares.filter(share => share.vehicle_id === props.vehicle.id);
+});
+
 const showConfirm = ref(false);
 const deleting = ref(false);
 const showShareForm = ref(false);
@@ -22,7 +28,7 @@ const shareError = ref('');
 async function handleDelete() {
   deleting.value = true;
   try {
-    await deleteVehicle(props.vehicle.id, token.value);
+    await deleteVehicle(props.vehicle.id);
     emit('delete');
   } catch (e) {
     console.error(e);
@@ -39,7 +45,7 @@ async function handleShare() {
   shareError.value = '';
 
   try {
-    await shareVehicle(props.vehicle.id, shareEmail.value, sharePermission.value, token.value);
+    await shareVehicle(props.vehicle.id, shareEmail.value, sharePermission.value);
     shareEmail.value = '';
     sharePermission.value = 'read';
     showShareForm.value = false;
@@ -48,6 +54,15 @@ async function handleShare() {
     shareError.value = e.message;
   } finally {
     shareLoading.value = false;
+  }
+}
+
+async function handleUnshare(shareId) {
+  try {
+    await unshareVehicle(shareId);
+    emit('unshare');
+  } catch (e) {
+    console.error('Failed to unshare:', e);
   }
 }
 
@@ -97,6 +112,15 @@ function getPermissionLabel() {
             <p v-if="shareError" class="error">{{ shareError }}</p>
           </div>
         </template>
+        
+        <!-- Show who vehicle is shared with -->
+        <div v-if="vehicleShares.length > 0 && !showShareForm" class="shares-list">
+          <div v-for="share in vehicleShares" :key="share.id" class="share-item">
+            <span class="share-email">{{ share.shared_with_email }}</span>
+            <span :class="['share-permission', share.permission_level]">{{ share.permission_level }}</span>
+            <button @click="handleUnshare(share.id)" class="unshare-btn">Remove</button>
+          </div>
+        </div>
       </template>
       
       <template v-if="!vehicle.is_shared && !showShareForm">
@@ -188,5 +212,61 @@ function getPermissionLabel() {
   color: #f44336;
   font-size: 0.8rem;
   margin: 0;
+}
+
+.shares-list {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.share-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.share-item:last-child {
+  border-bottom: none;
+}
+
+.share-email {
+  flex: 1;
+  color: #333;
+}
+
+.share-permission {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  text-transform: lowercase;
+}
+
+.share-permission.read {
+  background-color: #9e9e9e;
+  color: white;
+}
+
+.share-permission.write {
+  background-color: #2196f3;
+  color: white;
+}
+
+.unshare-btn {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.375rem;
+  background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.unshare-btn:hover {
+  background-color: #d32f2f;
 }
 </style>

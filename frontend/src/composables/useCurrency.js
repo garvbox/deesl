@@ -18,9 +18,9 @@ export function useCurrency() {
     return formatter.value.format(amount);
   }
 
-  async function loadCurrency(userId, token) {
+  async function loadCurrency() {
     try {
-      const profile = await apiGet(`/users/me?user_id=${userId}`, token);
+      const profile = await apiGet('/users/me');
       currency.value = profile.currency;
       localStorage.setItem('currency', profile.currency);
     } catch (e) {
@@ -28,8 +28,8 @@ export function useCurrency() {
     }
   }
 
-  async function saveCurrency(newCurrency, userId, token) {
-    const profile = await apiPatch(`/users/me?user_id=${userId}`, { currency: newCurrency }, token);
+  async function saveCurrency(newCurrency) {
+    const profile = await apiPatch('/users/me', { currency: newCurrency });
     currency.value = profile.currency;
     localStorage.setItem('currency', profile.currency);
   }

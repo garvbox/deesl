@@ -1,44 +1,19 @@
 use axum::{
     Json, Router,
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{delete, get},
-};
-use axum_extra::{
-    TypedHeader,
-    headers::{Authorization, authorization::Bearer},
 };
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
 use serde::Deserialize;
 
 use crate::AppState;
-use crate::auth::AuthConfig;
+use crate::auth::extract_auth_user;
 use crate::handlers::internal_error;
 use crate::models::{FuelEntry, FuelStation, NewFuelEntry, NewFuelStation, NewVehicle, Vehicle};
 use crate::schema::{fuel_entries, fuel_stations, vehicle_shares, vehicles};
-
-#[derive(Debug, Clone)]
-pub struct AuthUser {
-    pub user_id: i32,
-    #[allow(dead_code)]
-    pub email: String,
-}
-
-fn extract_auth_user(
-    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
-) -> Result<AuthUser, (StatusCode, String)> {
-    let auth_config = AuthConfig::new();
-    let claims = auth_config
-        .validate_token(bearer.token())
-        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
-
-    Ok(AuthUser {
-        user_id: claims.user_id,
-        email: claims.sub,
-    })
-}
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -76,10 +51,23 @@ impl From<FuelStation> for FuelStationResponse {
 
 pub async fn list_fuel_stations(
     State(pool): State<Pool>,
+    headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // Verify user is authenticated and get user_id
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = auth_user.user_id;
     let stations: Vec<FuelStation> = conn
-        .interact(|conn| fuel_stations::table.order(fuel_stations::name).load(conn))
+        .interact(move |conn| {
+            fuel_stations::table
+                .filter(
+                    fuel_stations::user_id
+                        .eq(user_id)
+                        .or(fuel_stations::user_id.is_null()),
+                )
+                .order(fuel_stations::name)
+                .load(conn)
+        })
         .await
         .map_err(internal_error)?
         .map_err(|e| {
@@ -104,15 +92,22 @@ pub struct CreateFuelStationRequest {
 
 pub async fn create_fuel_station(
     State(pool): State<Pool>,
+    headers: HeaderMap,
     Json(payload): Json<CreateFuelStationRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // Verify user is authenticated and get user_id
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
     let name = payload.name.clone();
+    let user_id = auth_user.user_id;
 
     let station = conn
         .interact(move |conn| {
             diesel::insert_into(fuel_stations::table)
-                .values(NewFuelStation { name })
+                .values(NewFuelStation {
+                    name,
+                    user_id: Some(user_id),
+                })
                 .returning(FuelStation::as_returning())
                 .get_result(conn)
         })
@@ -133,9 +128,44 @@ pub async fn create_fuel_station(
 
 pub async fn delete_fuel_station(
     State(pool): State<Pool>,
+    headers: HeaderMap,
     axum::extract::Path(id): axum::extract::Path<i32>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // Verify user is authenticated and get user_id
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = auth_user.user_id;
+
+    // Verify ownership before deleting (allow deleting own stations or legacy stations with NULL user_id)
+    let is_owner: bool = conn
+        .interact(move |conn| {
+            fuel_stations::table
+                .filter(fuel_stations::id.eq(id))
+                .filter(
+                    fuel_stations::user_id
+                        .eq(user_id)
+                        .or(fuel_stations::user_id.is_null()),
+                )
+                .first::<FuelStation>(conn)
+                .optional()
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("DB error: {}", e),
+            )
+        })?
+        .map(|_| true)
+        .unwrap_or(false);
+
+    if !is_owner {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "You don't own this fuel station".to_string(),
+        ));
+    }
 
     conn.interact(move |conn| {
         diesel::delete(fuel_stations::table.filter(fuel_stations::id.eq(id))).execute(conn)
@@ -177,9 +207,9 @@ impl VehicleResponse {
 
 pub async fn list_vehicles(
     State(pool): State<Pool>,
-    auth_header: TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let auth_user = extract_auth_user(auth_header)?;
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = auth_user.user_id;
 
@@ -251,10 +281,10 @@ pub struct CreateVehicleRequest {
 
 pub async fn create_vehicle(
     State(pool): State<Pool>,
-    auth_header: TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
     Json(payload): Json<CreateVehicleRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let auth_user = extract_auth_user(auth_header)?;
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
 
     let make = payload.make.clone();
@@ -295,10 +325,10 @@ pub async fn create_vehicle(
 
 pub async fn delete_vehicle(
     State(pool): State<Pool>,
-    auth_header: TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
     axum::extract::Path(id): axum::extract::Path<i32>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let auth_user = extract_auth_user(auth_header)?;
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = auth_user.user_id;
 
@@ -361,10 +391,10 @@ pub struct FuelEntryResponse {
 
 pub async fn list_fuel_entries(
     State(pool): State<Pool>,
-    auth_header: TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
     axum::extract::Query(params): axum::extract::Query<FuelEntryQueryParams>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let auth_user = extract_auth_user(auth_header)?;
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = auth_user.user_id;
 
@@ -439,10 +469,10 @@ pub struct FuelEntryQueryParams {
 
 pub async fn get_fuel_entry(
     State(pool): State<Pool>,
-    auth_header: TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
     axum::extract::Path(id): axum::extract::Path<i32>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let auth_user = extract_auth_user(auth_header)?;
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = auth_user.user_id;
 
@@ -513,10 +543,10 @@ pub struct CreateFuelEntryRequest {
 
 pub async fn create_fuel_entry(
     State(pool): State<Pool>,
-    auth_header: TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
     Json(payload): Json<CreateFuelEntryRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let auth_user = extract_auth_user(auth_header)?;
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = auth_user.user_id;
 
@@ -642,10 +672,10 @@ pub async fn create_fuel_entry(
 
 pub async fn delete_fuel_entry(
     State(pool): State<Pool>,
-    auth_header: TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
     axum::extract::Path(id): axum::extract::Path<i32>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let auth_user = extract_auth_user(auth_header)?;
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = auth_user.user_id;
 
@@ -733,6 +763,7 @@ mod tests {
             id,
             name: name.to_string(),
             created_at: epoch(),
+            user_id: Some(1),
         }
     }
 

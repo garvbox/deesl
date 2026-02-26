@@ -1,9 +1,16 @@
-use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
+use axum::{
+    Json, Router,
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+    routing::get,
+};
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
+use crate::auth::extract_auth_user;
 use crate::handlers::internal_error;
 use crate::models::User;
 use crate::schema::users;
@@ -29,20 +36,19 @@ impl From<User> for UserProfileResponse {
     }
 }
 
-#[derive(Deserialize)]
-pub struct UserQueryParams {
-    pub user_id: i32,
-}
-
 pub async fn get_me(
     State(pool): State<Pool>,
-    axum::extract::Query(params): axum::extract::Query<UserQueryParams>,
+    headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
-    let user_id = params.user_id;
 
     let user: User = conn
-        .interact(move |conn| users::table.filter(users::id.eq(user_id)).first(conn))
+        .interact(move |conn| {
+            users::table
+                .filter(users::id.eq(auth_user.user_id))
+                .first(conn)
+        })
         .await
         .map_err(internal_error)?
         .map_err(|_| (StatusCode::NOT_FOUND, "User not found".to_string()))?;
@@ -74,18 +80,18 @@ pub(crate) fn validate_currency(currency: &str) -> Result<(), (StatusCode, Strin
 
 pub async fn update_me(
     State(pool): State<Pool>,
-    axum::extract::Query(params): axum::extract::Query<UserQueryParams>,
+    headers: HeaderMap,
     Json(payload): Json<UpdateProfileRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     validate_currency(&payload.currency)?;
 
+    let auth_user = extract_auth_user(&headers)?;
     let conn = pool.get().await.map_err(internal_error)?;
-    let user_id = params.user_id;
     let currency = payload.currency.clone();
 
     let user: User = conn
         .interact(move |conn| {
-            diesel::update(users::table.filter(users::id.eq(user_id)))
+            diesel::update(users::table.filter(users::id.eq(auth_user.user_id)))
                 .set(users::currency.eq(currency))
                 .returning(User::as_returning())
                 .get_result(conn)

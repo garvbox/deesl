@@ -1,7 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { listFuelEntries } from '../services/fuelEntries';
-import { useAuth } from '../composables/useAuth';
 import AddFuelEntryForm from './AddFuelEntryForm.vue';
 import FuelEntryItem from './FuelEntryItem.vue';
 
@@ -12,8 +11,6 @@ const props = defineProps({
 
 const emit = defineEmits(['back']);
 
-const { token } = useAuth();
-
 const entries = ref([]);
 const loading = ref(true);
 const error = ref('');
@@ -21,7 +18,7 @@ const showAddForm = ref(false);
 
 async function loadEntries() {
   try {
-    entries.value = await listFuelEntries(props.vehicle.id, token.value);
+    entries.value = await listFuelEntries(props.vehicle.id);
   } catch (e) {
     error.value = e.message;
   } finally {

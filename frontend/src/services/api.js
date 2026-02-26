@@ -1,13 +1,10 @@
 const API_BASE = '/api';
 
-export async function apiPost(endpoint, data, token) {
-  const headers = { 'Content-Type': 'application/json' };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+export async function apiPost(endpoint, data) {
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'POST',
-    headers,
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify(data),
   });
   
@@ -19,13 +16,10 @@ export async function apiPost(endpoint, data, token) {
   return response.json();
 }
 
-export async function apiGet(endpoint, token) {
-  const headers = {};
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  
-  const response = await fetch(`${API_BASE}${endpoint}`, { headers });
+export async function apiGet(endpoint) {
+  const response = await fetch(`${API_BASE}${endpoint}`, { 
+    credentials: 'include',
+  });
   
   if (!response.ok) {
     const text = await response.text();
@@ -35,14 +29,11 @@ export async function apiGet(endpoint, token) {
   return response.json();
 }
 
-export async function apiPatch(endpoint, data, token) {
-  const headers = { 'Content-Type': 'application/json' };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+export async function apiPatch(endpoint, data) {
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'PATCH',
-    headers,
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify(data),
   });
 
@@ -54,15 +45,10 @@ export async function apiPatch(endpoint, data, token) {
   return response.json();
 }
 
-export async function apiDelete(endpoint, token) {
-  const headers = {};
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  
+export async function apiDelete(endpoint) {
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'DELETE',
-    headers,
+    credentials: 'include',
   });
   
   if (!response.ok) {
