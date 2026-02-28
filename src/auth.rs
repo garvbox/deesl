@@ -26,7 +26,15 @@ impl AuthConfig {
                 .unwrap_or_else(|_| "dev-secret-change-in-production".to_string()),
         }
     }
+}
 
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AuthConfig {
     pub fn create_token(
         &self,
         user_id: i32,

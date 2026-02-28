@@ -456,6 +456,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-util",
+ "tower",
  "tower-cookies",
  "tower-http",
  "tower-livereload",

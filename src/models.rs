@@ -13,6 +13,16 @@ pub struct User {
     pub google_id: Option<String>,
 }
 
+#[derive(Insertable, serde::Deserialize)]
+#[diesel(table_name = crate::schema::users)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewUser {
+    pub email: String,
+    pub password_hash: Option<String>,
+    pub currency: String,
+    pub google_id: Option<String>,
+}
+
 #[derive(Queryable, Selectable, serde::Serialize)]
 #[diesel(table_name = crate::schema::vehicles)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
