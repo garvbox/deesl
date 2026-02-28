@@ -14,5 +14,3 @@ threads = 4
 t = "test --all-features"
 tc = "test --all-features -- --nocapture"
 lint = "clippy --all --tests --all-features --no-deps -- -D warnings"
-cov = "tarpaulin --all-features --workspace --timeout 120 --out html --output-dir coverage"
-cov-open = "tarpaulin --all-features --workspace --timeout 120 --out html --output-dir coverage && open coverage/index.html"
