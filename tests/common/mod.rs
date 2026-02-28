@@ -56,7 +56,8 @@ pub fn create_test_token(user_id: i32, email: &str) -> String {
     auth_config.create_token(user_id, email).unwrap()
 }
 
-/// Makes an authenticated GET request
+/// Makes an authenticated GET request (legacy helper)
+#[allow(dead_code)]
 pub async fn get(app: &Router, path: &str, token: &str) -> Response<Body> {
     let request = Request::builder()
         .uri(path)
@@ -67,7 +68,8 @@ pub async fn get(app: &Router, path: &str, token: &str) -> Response<Body> {
     app.clone().oneshot(request).await.unwrap()
 }
 
-/// Makes an authenticated POST request with JSON body
+/// Makes an authenticated POST request with JSON body (legacy helper)
+#[allow(dead_code)]
 pub async fn post<T: serde::Serialize>(
     app: &Router,
     path: &str,
@@ -106,7 +108,8 @@ pub async fn put<T: serde::Serialize>(
     app.clone().oneshot(request).await.unwrap()
 }
 
-/// Makes an authenticated DELETE request
+/// Makes an authenticated DELETE request (legacy helper)
+#[allow(dead_code)]
 pub async fn delete(app: &Router, path: &str, token: &str) -> Response<Body> {
     let request = Request::builder()
         .method(http::Method::DELETE)
@@ -120,17 +123,14 @@ pub async fn delete(app: &Router, path: &str, token: &str) -> Response<Body> {
 
 /// Makes an authenticated multipart POST request for CSV import using axum-test
 pub async fn post_import_csv(
-    app: &Router,
+    server: &TestServer,
     path: &str,
     token: &str,
     vehicle_id: i32,
     csv_content: &[u8],
     mappings: Option<serde_json::Value>,
-) -> Response<Body> {
-    use axum_test::TestServer;
+) -> TestResponse {
     use axum_test::multipart::{MultipartForm, Part};
-
-    let server = TestServer::new(app.clone()).unwrap();
 
     let mut form = MultipartForm::new()
         .add_part("vehicle_id", Part::text(vehicle_id.to_string()))
@@ -143,26 +143,18 @@ pub async fn post_import_csv(
         form = form.add_part("mappings", Part::text(mappings.to_string()));
     }
 
-    let response = server
+    server
         .post(path)
         .add_header("Cookie", format!("auth_token={}", token))
         .multipart(form)
-        .await;
-
-    // Convert axum-test response to standard Response<Body>
-    let status = response.status_code();
-    let body_bytes = response.as_bytes().to_vec();
-
-    Response::builder()
-        .status(status)
-        .body(Body::from(body_bytes))
-        .unwrap()
+        .await
 }
 
 // ============================================================================
 // NEW AXUM-TEST BASED HELPERS
 // ============================================================================
 
+use axum_test::TestResponse;
 use axum_test::TestServer;
 
 /// Test environment using axum-test's TestServer for cleaner testing
@@ -389,7 +381,8 @@ pub async fn cleanup_test_data(pool: &Pool) {
     .unwrap();
 }
 
-/// Parses JSON response body
+/// Parses JSON response body (legacy helper)
+#[allow(dead_code)]
 pub async fn parse_json_response<T: serde::de::DeserializeOwned>(response: Response<Body>) -> T {
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
