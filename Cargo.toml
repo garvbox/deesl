@@ -44,3 +44,4 @@ tower = "0.5"
 [dev-dependencies]
 axum-test = "18"
 uuid = { version = "1", features = ["v4"] }
+pretty_assertions = "1.4"

@@ -515,6 +515,7 @@ dependencies = [
  "http-security-headers",
  "jsonwebtoken",
  "oauth2",
+ "pretty_assertions",
  "reqwest 0.13.2",
  "rstest",
  "serde",

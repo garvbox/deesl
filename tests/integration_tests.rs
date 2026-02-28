@@ -1,4 +1,5 @@
 use axum::http::StatusCode;
+use pretty_assertions::assert_eq;
 use serde_json::json;
 
 mod common;
