@@ -129,7 +129,6 @@ pub async fn post_import_csv(
 ) -> Response<Body> {
     use std::io::Write;
 
-    let _boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
     let mut body: Vec<u8> = Vec::new();
 
     // vehicle_id field

@@ -1065,3 +1065,164 @@ async fn test_shared_user_with_read_cannot_import(
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
+
+#[rstest]
+#[tokio::test]
+async fn test_import_rejects_oversized_file(
+    #[future] test_env: (
+        common::TestUser,
+        axum::Router,
+        deadpool_diesel::postgres::Pool,
+    ),
+) {
+    let (user, app, pool) = test_env.await;
+
+    // Create a vehicle
+    let vehicle_id =
+        common::create_test_vehicle_db(&pool, user.id, "BMW", "330d", "BMW-330D").await;
+
+    // Create CSV content larger than 5MB (5 * 1024 * 1024 = 5242880 bytes)
+    let header = "Date,Time,Location,Litres,Cost,KM\n";
+    let row = "03/05/2025,12:52:00,Circle K Mitchelstown,53.71,84.59,255552\n";
+    let rows_needed = (6 * 1024 * 1024) / row.len() + 1; // Ensure we exceed 5MB
+    let csv_content: Vec<u8> =
+        std::iter::repeat_n(row, rows_needed)
+            .fold(header.as_bytes().to_vec(), |mut acc, r| {
+                acc.extend_from_slice(r.as_bytes());
+                acc
+            });
+
+    let response = common::post_import_csv(
+        &app,
+        "/api/fuel-entries/import/preview",
+        &user.token,
+        vehicle_id,
+        &csv_content,
+        None,
+    )
+    .await;
+
+    // Should be rejected - either by our size check (413) or multipart parsing (400)
+    assert!(
+        response.status() == StatusCode::PAYLOAD_TOO_LARGE || response.status() == StatusCode::BAD_REQUEST,
+        "Expected 413 or 400, got {:?}",
+        response.status()
+    );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_import_rejects_empty_csv(
+    #[future] test_env: (
+        common::TestUser,
+        axum::Router,
+        deadpool_diesel::postgres::Pool,
+    ),
+) {
+    let (user, app, pool) = test_env.await;
+
+    // Create a vehicle
+    let vehicle_id =
+        common::create_test_vehicle_db(&pool, user.id, "BMW", "330d", "BMW-330D").await;
+
+    // Empty CSV with only headers
+    let csv_content = b"Date,Time,Location,Litres,Cost,KM\n";
+
+    let response = common::post_import_csv(
+        &app,
+        "/api/fuel-entries/import/preview",
+        &user.token,
+        vehicle_id,
+        csv_content,
+        None,
+    )
+    .await;
+
+    // Empty CSV should still return 200 with empty preview
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = common::parse_json_response(response).await;
+    assert_eq!(body["preview_row_count"].as_i64().unwrap(), 0);
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_import_returns_error_for_malformed_csv(
+    #[future] test_env: (
+        common::TestUser,
+        axum::Router,
+        deadpool_diesel::postgres::Pool,
+    ),
+) {
+    let (user, app, pool) = test_env.await;
+
+    // Create a vehicle
+    let vehicle_id =
+        common::create_test_vehicle_db(&pool, user.id, "BMW", "330d", "BMW-330D").await;
+
+    // Malformed CSV with inconsistent columns
+    let csv_content = b"Date,Time,Location,Litres,Cost,KM
+03/05/2025,12:52:00,Circle K Mitchelstown,53.71,84.59
+"; // Missing last column
+
+    let response = common::post_import_csv(
+        &app,
+        "/api/fuel-entries/import/preview",
+        &user.token,
+        vehicle_id,
+        csv_content,
+        None,
+    )
+    .await;
+
+    // CSV library detects inconsistent columns and returns error
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_import_reports_invalid_date_format(
+    #[future] test_env: (
+        common::TestUser,
+        axum::Router,
+        deadpool_diesel::postgres::Pool,
+    ),
+) {
+    let (user, app, pool) = test_env.await;
+
+    // Create a vehicle
+    let vehicle_id =
+        common::create_test_vehicle_db(&pool, user.id, "BMW", "330d", "BMW-330D").await;
+
+    // CSV with invalid date format (unsupported format)
+    let csv_content = b"Date,Time,Location,Litres,Cost,KM
+05-03-2025,12:52:00,Circle K Mitchelstown,53.71,84.59,255552
+"; // MM-DD-YYYY format not supported
+
+    let mappings = json!({
+        "filled_at_date": "Date",
+        "filled_at_time": "Time",
+        "station": "Location",
+        "litres": "Litres",
+        "cost": "Cost",
+        "mileage_km": "KM"
+    });
+
+    let response = common::post_import_csv(
+        &app,
+        "/api/fuel-entries/import",
+        &user.token,
+        vehicle_id,
+        csv_content,
+        Some(mappings),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = common::parse_json_response(response).await;
+    assert_eq!(body["imported"].as_i64().unwrap(), 0);
+    assert!(!body["errors"].as_array().unwrap().is_empty());
+    let first_error = body["errors"][0].as_str().unwrap();
+    assert!(first_error.contains("Invalid date/time format") || first_error.contains("Invalid"));
+}

@@ -28,7 +28,7 @@ pub struct PreviewResponse {
     columns: Vec<String>,
     preview: Vec<Vec<String>>,
     suggested_mappings: HashMap<String, String>,
-    total_rows: usize,
+    preview_row_count: usize,
 }
 
 #[derive(Serialize)]
@@ -54,6 +54,58 @@ struct ParsedRow {
 struct StationOp {
     normalized_name: String,
     original_name: String,
+}
+
+pub async fn check_vehicle_write_access(
+    pool: &Pool,
+    user_id: i32,
+    vehicle_id: i32,
+) -> Result<(), (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let has_write_access = conn
+        .interact(move |conn| {
+            let vehicle: Vehicle = vehicles::table
+                .filter(vehicles::id.eq(vehicle_id))
+                .first(conn)
+                .optional()?
+                .ok_or(diesel::result::Error::NotFound)?;
+
+            if vehicle.owner_id == user_id {
+                return Ok::<(bool, bool), diesel::result::Error>((true, true));
+            }
+
+            let share = vehicle_shares::table
+                .filter(vehicle_shares::vehicle_id.eq(vehicle_id))
+                .filter(vehicle_shares::shared_with_user_id.eq(user_id))
+                .first::<crate::models::VehicleShare>(conn)
+                .optional()?;
+
+            match share {
+                Some(s) => Ok((true, s.permission_level == "write")),
+                None => Ok((false, false)),
+            }
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|_| (StatusCode::NOT_FOUND, "Vehicle not found".to_string()))?;
+
+    let (has_access, has_write) = has_write_access;
+
+    if !has_access {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "You don't have access to this vehicle".to_string(),
+        ));
+    }
+
+    if !has_write {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "You don't have write permission for this vehicle".to_string(),
+        ));
+    }
+
+    Ok(())
 }
 
 pub async fn preview_import(
@@ -107,52 +159,7 @@ pub async fn preview_import(
         vehicle_id.ok_or((StatusCode::BAD_REQUEST, "vehicle_id required".to_string()))?;
     let csv_data = csv_data.ok_or((StatusCode::BAD_REQUEST, "No file uploaded".to_string()))?;
 
-    // Check user has write access to the vehicle
-    let conn = pool.get().await.map_err(internal_error)?;
-    let has_write_access = conn
-        .interact(move |conn| {
-            let vehicle: Vehicle = vehicles::table
-                .filter(vehicles::id.eq(vehicle_id))
-                .first(conn)
-                .optional()?
-                .ok_or(diesel::result::Error::NotFound)?;
-
-            // Check ownership
-            if vehicle.owner_id == user_id {
-                return Ok::<(bool, bool), diesel::result::Error>((true, true));
-            }
-
-            // Check if shared with write permission
-            let share = vehicle_shares::table
-                .filter(vehicle_shares::vehicle_id.eq(vehicle_id))
-                .filter(vehicle_shares::shared_with_user_id.eq(user_id))
-                .first::<crate::models::VehicleShare>(conn)
-                .optional()?;
-
-            match share {
-                Some(s) => Ok((true, s.permission_level == "write")),
-                None => Ok((false, false)),
-            }
-        })
-        .await
-        .map_err(internal_error)?
-        .map_err(|_| (StatusCode::NOT_FOUND, "Vehicle not found".to_string()))?;
-
-    let (has_access, has_write) = has_write_access;
-
-    if !has_access {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "You don't have access to this vehicle".to_string(),
-        ));
-    }
-
-    if !has_write {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "You don't have write permission for this vehicle".to_string(),
-        ));
-    }
+    check_vehicle_write_access(&pool, user_id, vehicle_id).await?;
 
     let mut reader = csv::Reader::from_reader(&csv_data[..]);
     let headers: Vec<String> = reader
@@ -195,13 +202,13 @@ pub async fn preview_import(
         }
     }
 
-    let total_rows = preview.len();
+    let preview_row_count = preview.len();
 
     Ok(Json(PreviewResponse {
         columns: headers,
         preview,
         suggested_mappings,
-        total_rows,
+        preview_row_count,
     }))
 }
 
@@ -268,52 +275,7 @@ pub async fn execute_import(
     let csv_data = csv_data.ok_or((StatusCode::BAD_REQUEST, "No file uploaded".to_string()))?;
     let mappings = mappings.ok_or((StatusCode::BAD_REQUEST, "mappings required".to_string()))?;
 
-    // Check user has write access to the vehicle
-    let conn = pool.get().await.map_err(internal_error)?;
-    let has_write_access = conn
-        .interact(move |conn| {
-            let vehicle: Vehicle = vehicles::table
-                .filter(vehicles::id.eq(vehicle_id))
-                .first(conn)
-                .optional()?
-                .ok_or(diesel::result::Error::NotFound)?;
-
-            // Check ownership
-            if vehicle.owner_id == user_id {
-                return Ok::<(bool, bool), diesel::result::Error>((true, true));
-            }
-
-            // Check if shared with write permission
-            let share = vehicle_shares::table
-                .filter(vehicle_shares::vehicle_id.eq(vehicle_id))
-                .filter(vehicle_shares::shared_with_user_id.eq(user_id))
-                .first::<crate::models::VehicleShare>(conn)
-                .optional()?;
-
-            match share {
-                Some(s) => Ok((true, s.permission_level == "write")),
-                None => Ok((false, false)),
-            }
-        })
-        .await
-        .map_err(internal_error)?
-        .map_err(|_| (StatusCode::NOT_FOUND, "Vehicle not found".to_string()))?;
-
-    let (has_access, has_write) = has_write_access;
-
-    if !has_access {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "You don't have access to this vehicle".to_string(),
-        ));
-    }
-
-    if !has_write {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "You don't have write permission for this vehicle".to_string(),
-        ));
-    }
+    check_vehicle_write_access(&pool, user_id, vehicle_id).await?;
 
     let mut reader = csv::Reader::from_reader(&csv_data[..]);
     let headers: Vec<String> = reader
