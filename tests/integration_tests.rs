@@ -93,6 +93,26 @@ async fn test_auth_accepts_valid_token(
     assert_eq!(response.status(), StatusCode::OK);
 }
 
+// AXUM-TEST VERSION: Demonstrates cleaner syntax with built-in assertions
+#[tokio::test]
+async fn test_auth_accepts_valid_token_axum_test() {
+    use common::AuthenticatedRequest;
+
+    // Setup (same as before, but using new helper)
+    let env = common::create_test_env().await;
+    let user = common::create_test_user(&env, "user").await;
+
+    // Test using axum-test's clean API with built-in assertions
+    let response = env.server.get("/api/vehicles").with_auth(&user.token).await;
+
+    // Built-in assertion with better error messages
+    response.assert_status_ok();
+
+    // Automatic JSON deserialization
+    let vehicles: Vec<serde_json::Value> = response.json();
+    assert!(vehicles.is_empty()); // New user has no vehicles yet
+}
+
 #[rstest]
 #[tokio::test]
 async fn test_vehicle_owner_can_create_vehicle(

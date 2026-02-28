@@ -130,7 +130,7 @@ pub async fn post_import_csv(
     use axum_test::TestServer;
     use axum_test::multipart::{MultipartForm, Part};
 
-    let server = TestServer::new(app.clone().into_make_service()).unwrap();
+    let server = TestServer::new(app.clone()).unwrap();
 
     let mut form = MultipartForm::new()
         .add_part("vehicle_id", Part::text(vehicle_id.to_string()))
@@ -157,6 +157,50 @@ pub async fn post_import_csv(
         .status(status)
         .body(Body::from(body_bytes))
         .unwrap()
+}
+
+// ============================================================================
+// NEW AXUM-TEST BASED HELPERS
+// ============================================================================
+
+use axum_test::TestServer;
+
+/// Test environment using axum-test's TestServer for cleaner testing
+pub struct TestEnv {
+    pub server: TestServer,
+    pub pool: Pool,
+}
+
+/// Creates a test environment with axum-test TestServer
+pub async fn create_test_env() -> TestEnv {
+    let pool = create_test_pool().await;
+    let app = create_test_app(pool.clone()).await;
+    let server = TestServer::new(app).unwrap();
+
+    TestEnv { server, pool }
+}
+
+/// Creates a test user and returns the user with a configured server
+pub async fn create_test_user(env: &TestEnv, prefix: &str) -> TestUser {
+    let email = format!("{}_{}@test.com", prefix, uuid::Uuid::new_v4());
+    create_test_user_db(&env.pool, &email).await
+}
+
+/// Parse JSON response from axum-test
+#[allow(dead_code)]
+pub fn parse_json<T: serde::de::DeserializeOwned>(response: &axum_test::TestResponse) -> T {
+    response.json::<T>()
+}
+
+/// Extension trait for TestServer to add authentication
+pub trait AuthenticatedRequest {
+    fn with_auth(self, token: &str) -> Self;
+}
+
+impl AuthenticatedRequest for axum_test::TestRequest {
+    fn with_auth(self, token: &str) -> Self {
+        self.add_header("Cookie", format!("auth_token={}", token))
+    }
 }
 
 /// Creates a test user in the database
