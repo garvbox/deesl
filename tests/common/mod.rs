@@ -28,6 +28,7 @@ pub async fn create_test_pool() -> Pool {
 /// Creates a test app with the given database pool
 pub async fn create_test_app(pool: Pool) -> Router {
     use deesl::AppState;
+    use deesl::import_handlers;
     use deesl::oauth_handlers;
     use deesl::user_handlers;
     use deesl::vehicle_fuel_handlers;
@@ -44,6 +45,7 @@ pub async fn create_test_app(pool: Pool) -> Router {
         .merge(user_handlers::router())
         .merge(vehicle_fuel_handlers::router())
         .merge(vehicle_share_handlers::router())
+        .merge(import_handlers::router())
         .layer(TraceLayer::new_for_http())
         .with_state(app_state)
 }
@@ -114,6 +116,47 @@ pub async fn delete(app: &Router, path: &str, token: &str) -> Response<Body> {
         .unwrap();
 
     app.clone().oneshot(request).await.unwrap()
+}
+
+/// Makes an authenticated multipart POST request for CSV import using axum-test
+pub async fn post_import_csv(
+    app: &Router,
+    path: &str,
+    token: &str,
+    vehicle_id: i32,
+    csv_content: &[u8],
+    mappings: Option<serde_json::Value>,
+) -> Response<Body> {
+    use axum_test::TestServer;
+    use axum_test::multipart::{MultipartForm, Part};
+
+    let server = TestServer::new(app.clone().into_make_service()).unwrap();
+
+    let mut form = MultipartForm::new()
+        .add_part("vehicle_id", Part::text(vehicle_id.to_string()))
+        .add_part(
+            "file",
+            Part::bytes(csv_content.to_vec()).file_name("test.csv"),
+        );
+
+    if let Some(mappings) = mappings {
+        form = form.add_part("mappings", Part::text(mappings.to_string()));
+    }
+
+    let response = server
+        .post(path)
+        .add_header("Cookie", format!("auth_token={}", token))
+        .multipart(form)
+        .await;
+
+    // Convert axum-test response to standard Response<Body>
+    let status = response.status_code();
+    let body_bytes = response.as_bytes().to_vec();
+
+    Response::builder()
+        .status(status)
+        .body(Body::from(body_bytes))
+        .unwrap()
 }
 
 /// Creates a test user in the database

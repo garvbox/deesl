@@ -73,5 +73,11 @@ jobs:
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libpq-dev
 
+      - name: Install diesel_cli
+        run: cargo install diesel_cli --no-default-features --features postgres
+
+      - name: Run database migrations
+        run: diesel migration run
+
       - name: Run tests
         run: cargo test --all-features
