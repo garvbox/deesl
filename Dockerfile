@@ -24,7 +24,7 @@ WORKDIR /app
 
 COPY Cargo.toml Cargo.lock ./
 
-RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs && echo "pub fn dummy() {}" > src/lib.rs
 
 # Build only dependencies - layer caching optimisation
 RUN cargo build --release
@@ -32,7 +32,7 @@ RUN cargo build --release
 RUN cargo install diesel_cli --no-default-features --features postgres
 
 COPY . .
-RUN touch src/main.rs
+RUN touch src/main.rs src/lib.rs
 
 RUN cargo build --release
 
