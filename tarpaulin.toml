@@ -1,0 +1,39 @@
+# Tarpaulin configuration
+# See: https://github.com/xd009642/tarpaulin#configuration-file
+
+[run]
+# Include tests in coverage
+include-tests = true
+
+# Don't include integration tests in coverage (unit tests only)
+# Set to false to include all tests
+exclude-tests = false
+
+# Timeout in seconds
+timeout = 120
+
+# Output formats
+out = ["Xml", "Html"]
+output-dir = "coverage"
+
+[report]
+# Coverage thresholds
+fail-under = 0  # Don't fail CI if coverage is low (for now)
+
+# Skip functions/hooks that should not be covered
+[ignore]
+# Ignore test modules themselves
+exclude = [
+    "tests/*",
+    "src/main.rs",
+]
+
+# Ignore specific lines
+[exclude]
+lines = [
+    "#\[cfg\(test\)\]",
+    "#\[test\]",
+    "unreachable!",
+    "panic!",
+    "todo!",
+]

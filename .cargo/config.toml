@@ -1,0 +1,18 @@
+[build]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[env]
+# Test database URL (can be overridden)
+DATABASE_URL = "postgres://postgres:postgres@localhost:5432/deesl_test"
+
+[test]
+# Run tests with multiple threads for faster execution
+# Note: Database tests need careful isolation, so we use 4 threads by default
+threads = 4
+
+[alias]
+t = "test --all-features"
+tc = "test --all-features -- --nocapture"
+lint = "clippy --all --tests --all-features --no-deps -- -D warnings"
+cov = "tarpaulin --all-features --workspace --timeout 120 --out html --output-dir coverage"
+cov-open = "tarpaulin --all-features --workspace --timeout 120 --out html --output-dir coverage && open coverage/index.html"
