@@ -8,14 +8,14 @@ use axum::{
 use chrono::Datelike;
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 
 use crate::AppState;
 use crate::auth::extract_auth_user;
 use crate::handlers::internal_error;
 use crate::models::{FuelEntry, FuelStation, NewFuelEntry, NewFuelStation, Vehicle};
-use crate::schema::{fuel_entries, fuel_stations, vehicles};
+use crate::schema::{fuel_entries, fuel_stations, vehicle_shares, vehicles};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -31,18 +31,12 @@ pub struct PreviewResponse {
     total_rows: usize,
 }
 
-#[derive(Deserialize)]
-#[allow(dead_code)]
-pub struct ExecuteImportRequest {
-    vehicle_id: i32,
-    mappings: HashMap<String, String>,
-}
-
 #[derive(Serialize)]
 pub struct ImportResult {
     imported: usize,
     skipped: usize,
     stations_created: usize,
+    total_errors: usize,
     errors: Vec<String>,
 }
 
@@ -52,7 +46,6 @@ pub async fn preview_import(
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let auth_user = extract_auth_user(&headers)?;
-    let _conn = pool.get().await.map_err(internal_error)?;
     let user_id = auth_user.user_id;
 
     let mut csv_data: Option<Vec<u8>> = None;
@@ -73,7 +66,17 @@ pub async fn preview_import(
         })?;
 
         match name.as_str() {
-            "file" => csv_data = Some(data.to_vec()),
+            "file" => {
+                // Check file size limit (5MB)
+                const MAX_FILE_SIZE: usize = 5 * 1024 * 1024;
+                if data.len() > MAX_FILE_SIZE {
+                    return Err((
+                        StatusCode::PAYLOAD_TOO_LARGE,
+                        "File too large. Maximum size is 5MB".to_string(),
+                    ));
+                }
+                csv_data = Some(data.to_vec())
+            }
             "vehicle_id" => {
                 vehicle_id =
                     Some(String::from_utf8_lossy(&data).trim().parse().map_err(|_| {
@@ -88,8 +91,9 @@ pub async fn preview_import(
         vehicle_id.ok_or((StatusCode::BAD_REQUEST, "vehicle_id required".to_string()))?;
     let csv_data = csv_data.ok_or((StatusCode::BAD_REQUEST, "No file uploaded".to_string()))?;
 
+    // Check user has write access to the vehicle
     let conn = pool.get().await.map_err(internal_error)?;
-    let has_access = conn
+    let has_write_access = conn
         .interact(move |conn| {
             let vehicle: Vehicle = vehicles::table
                 .filter(vehicles::id.eq(vehicle_id))
@@ -97,17 +101,41 @@ pub async fn preview_import(
                 .optional()?
                 .ok_or(diesel::result::Error::NotFound)?;
 
+            // Check ownership
             if vehicle.owner_id == user_id {
-                return Ok::<bool, diesel::result::Error>(true);
+                return Ok::<(bool, bool), diesel::result::Error>((true, true));
             }
-            Err(diesel::result::Error::NotFound)
+
+            // Check if shared with write permission
+            let share = vehicle_shares::table
+                .filter(vehicle_shares::vehicle_id.eq(vehicle_id))
+                .filter(vehicle_shares::shared_with_user_id.eq(user_id))
+                .first::<crate::models::VehicleShare>(conn)
+                .optional()?;
+
+            match share {
+                Some(s) => Ok((true, s.permission_level == "write")),
+                None => Ok((false, false)),
+            }
         })
         .await
         .map_err(internal_error)?
-        .map_err(|_| (StatusCode::FORBIDDEN, "Access denied".to_string()))?;
+        .map_err(|_| (StatusCode::NOT_FOUND, "Vehicle not found".to_string()))?;
+
+    let (has_access, has_write) = has_write_access;
 
     if !has_access {
-        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "You don't have access to this vehicle".to_string(),
+        ));
+    }
+
+    if !has_write {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "You don't have write permission for this vehicle".to_string(),
+        ));
     }
 
     let mut reader = csv::Reader::from_reader(&csv_data[..]);
@@ -188,7 +216,17 @@ pub async fn execute_import(
         })?;
 
         match name.as_str() {
-            "file" => csv_data = Some(data.to_vec()),
+            "file" => {
+                // Check file size limit (5MB)
+                const MAX_FILE_SIZE: usize = 5 * 1024 * 1024;
+                if data.len() > MAX_FILE_SIZE {
+                    return Err((
+                        StatusCode::PAYLOAD_TOO_LARGE,
+                        "File too large. Maximum size is 5MB".to_string(),
+                    ));
+                }
+                csv_data = Some(data.to_vec())
+            }
             "vehicle_id" => {
                 vehicle_id =
                     Some(String::from_utf8_lossy(&data).trim().parse().map_err(|_| {
@@ -214,9 +252,9 @@ pub async fn execute_import(
     let csv_data = csv_data.ok_or((StatusCode::BAD_REQUEST, "No file uploaded".to_string()))?;
     let mappings = mappings.ok_or((StatusCode::BAD_REQUEST, "mappings required".to_string()))?;
 
+    // Check user has write access to the vehicle
     let conn = pool.get().await.map_err(internal_error)?;
-
-    let _has_access = conn
+    let has_write_access = conn
         .interact(move |conn| {
             let vehicle: Vehicle = vehicles::table
                 .filter(vehicles::id.eq(vehicle_id))
@@ -224,14 +262,42 @@ pub async fn execute_import(
                 .optional()?
                 .ok_or(diesel::result::Error::NotFound)?;
 
+            // Check ownership
             if vehicle.owner_id == user_id {
-                return Ok::<bool, diesel::result::Error>(true);
+                return Ok::<(bool, bool), diesel::result::Error>((true, true));
             }
-            Err(diesel::result::Error::NotFound)
+
+            // Check if shared with write permission
+            let share = vehicle_shares::table
+                .filter(vehicle_shares::vehicle_id.eq(vehicle_id))
+                .filter(vehicle_shares::shared_with_user_id.eq(user_id))
+                .first::<crate::models::VehicleShare>(conn)
+                .optional()?;
+
+            match share {
+                Some(s) => Ok((true, s.permission_level == "write")),
+                None => Ok((false, false)),
+            }
         })
         .await
         .map_err(internal_error)?
-        .map_err(|_| (StatusCode::FORBIDDEN, "Access denied".to_string()))?;
+        .map_err(|_| (StatusCode::NOT_FOUND, "Vehicle not found".to_string()))?;
+
+    let (has_access, has_write) = has_write_access;
+
+    if !has_access {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "You don't have access to this vehicle".to_string(),
+        ));
+    }
+
+    if !has_write {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "You don't have write permission for this vehicle".to_string(),
+        ));
+    }
 
     let existing_stations: HashMap<String, i32> = pool
         .get()
@@ -475,10 +541,13 @@ pub async fn execute_import(
         }
     }
 
+    let total_errors = errors.len();
+
     Ok(Json(ImportResult {
         imported,
         skipped,
         stations_created,
+        total_errors,
         errors: errors.into_iter().take(10).collect(),
     }))
 }

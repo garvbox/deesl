@@ -976,3 +976,92 @@ async fn test_import_handles_different_date_formats(
     assert_eq!(body["imported"].as_i64().unwrap(), 3);
     assert!(body["errors"].as_array().unwrap().is_empty());
 }
+
+#[rstest]
+#[tokio::test]
+async fn test_shared_user_with_write_can_import(
+    #[future] two_user_env: (
+        common::TestUser,
+        common::TestUser,
+        axum::Router,
+        deadpool_diesel::postgres::Pool,
+    ),
+) {
+    let (owner, shared_user, app, pool) = two_user_env.await;
+
+    // Owner creates a vehicle
+    let vehicle_id =
+        common::create_test_vehicle_db(&pool, owner.id, "BMW", "330d", "BMW-330D").await;
+
+    // Owner shares vehicle with write permission
+    common::create_test_share_db(&pool, vehicle_id, shared_user.id, "write").await;
+
+    // Create CSV content
+    let csv_content = b"Date,Time,Location,Litres,Cost,KM
+03/05/2025,12:52:00,Circle K Mitchelstown,53.71,84.59,255552
+";
+
+    let mappings = json!({
+        "filled_at_date": "Date",
+        "filled_at_time": "Time",
+        "station": "Location",
+        "litres": "Litres",
+        "cost": "Cost",
+        "mileage_km": "KM"
+    });
+
+    // Shared user with write permission can import
+    let response = common::post_import_csv(
+        &app,
+        "/api/fuel-entries/import",
+        &shared_user.token,
+        vehicle_id,
+        csv_content,
+        Some(mappings),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = common::parse_json_response(response).await;
+    assert_eq!(body["imported"].as_i64().unwrap(), 1);
+    assert_eq!(body["skipped"].as_i64().unwrap(), 0);
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_shared_user_with_read_cannot_import(
+    #[future] two_user_env: (
+        common::TestUser,
+        common::TestUser,
+        axum::Router,
+        deadpool_diesel::postgres::Pool,
+    ),
+) {
+    let (owner, shared_user, app, pool) = two_user_env.await;
+
+    // Owner creates a vehicle
+    let vehicle_id =
+        common::create_test_vehicle_db(&pool, owner.id, "BMW", "330d", "BMW-330D").await;
+
+    // Owner shares vehicle with read-only permission
+    common::create_test_share_db(&pool, vehicle_id, shared_user.id, "read").await;
+
+    // Create CSV content
+    let csv_content = b"Date,Time,Location,Litres,Cost,KM
+03/05/2025,12:52:00,Circle K Mitchelstown,53.71,84.59,255552
+";
+
+    // Shared user with read permission cannot import
+    let response = common::post_import_csv(
+        &app,
+        "/api/fuel-entries/import/preview",
+        &shared_user.token,
+        vehicle_id,
+        csv_content,
+        None,
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
