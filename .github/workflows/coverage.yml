@@ -13,7 +13,6 @@ jobs:
       GOOGLE_CLIENT_ID: placeholder
       GOOGLE_CLIENT_SECRET: placeholder
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/deesl_test
-      CARGO_INCREMENTAL: 0
 
     services:
       postgres:
