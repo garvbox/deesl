@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use crate::AppState;
 use crate::auth::extract_auth_user;
 use crate::handlers::internal_error;
-use crate::models::{FuelStation, NewFuelEntry, NewFuelStation, Vehicle};
-use crate::schema::{fuel_entries, fuel_stations, vehicle_shares, vehicles};
+use crate::models::{FuelStation, NewFuelStation, Vehicle};
+use crate::schema::{fuel_stations, vehicle_shares, vehicles};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -503,7 +503,7 @@ pub async fn execute_import(
                 let mut all_stations = stations_map;
                 all_stations.extend(new_stations_cache);
 
-                // Insert all fuel entries
+                // Insert all fuel entries - check for duplicates first
                 let mut imported: usize = 0;
                 let mut skipped: usize = 0;
                 let mut row_errors: Vec<String> = Vec::new();
@@ -514,22 +514,34 @@ pub async fn execute_import(
                         .as_ref()
                         .and_then(|name| all_stations.get(&normalize_station_name(name)).copied());
 
-                    match diesel::insert_into(fuel_entries::table)
-                        .values(NewFuelEntry {
-                            vehicle_id,
-                            station_id,
-                            mileage_km: row.mileage_km,
-                            litres: row.litres,
-                            cost: row.cost,
-                            filled_at: Some(row.filled_at),
-                        })
+                    // Check if entry already exists
+                    let exists: bool = diesel::dsl::select(diesel::dsl::exists(
+                        crate::schema::fuel_entries::table
+                            .filter(crate::schema::fuel_entries::vehicle_id.eq(vehicle_id))
+                            .filter(crate::schema::fuel_entries::mileage_km.eq(row.mileage_km))
+                            .filter(crate::schema::fuel_entries::filled_at.eq(row.filled_at)),
+                    ))
+                    .get_result(conn)
+                    .unwrap_or(false);
+
+                    if exists {
+                        skipped += 1;
+                        continue;
+                    }
+
+                    // Insert new entry
+                    match diesel::insert_into(crate::schema::fuel_entries::table)
+                        .values((
+                            crate::schema::fuel_entries::vehicle_id.eq(vehicle_id),
+                            crate::schema::fuel_entries::station_id.eq(station_id),
+                            crate::schema::fuel_entries::mileage_km.eq(row.mileage_km),
+                            crate::schema::fuel_entries::litres.eq(row.litres),
+                            crate::schema::fuel_entries::cost.eq(row.cost),
+                            crate::schema::fuel_entries::filled_at.eq(row.filled_at),
+                        ))
                         .execute(conn)
                     {
                         Ok(_) => imported += 1,
-                        Err(DieselError::DatabaseError(
-                            diesel::result::DatabaseErrorKind::UniqueViolation,
-                            _,
-                        )) => skipped += 1,
                         Err(e) => {
                             row_errors.push(format!("Row {}: Database error - {}", row.row_num, e));
                         }
