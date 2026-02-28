@@ -1,17 +1,12 @@
 use axum::http::StatusCode;
 use rstest::{fixture, rstest};
 use serde_json::json;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 mod common;
 
 /// Generate a unique email address for testing
 fn unique_email(prefix: &str) -> String {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    format!("{}_{}@test.com", prefix, timestamp)
+    format!("{}_{}@test.com", prefix, uuid::Uuid::new_v4())
 }
 
 /// Test fixture providing a clean test environment
