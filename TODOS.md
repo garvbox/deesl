@@ -6,5 +6,5 @@
 - [x] Frontend: Add date and time picker for fuel transactions so they can be back-dated
 - [x] Vehicle sharing with other users (with read/write permission levels)
 - [x] Security: Should the frontend be using query params? JWTs were intended
-- [ ] Backend: Add better integration tests using proper tokens and checking permissions
+- [x] Backend: Add better integration tests using proper tokens and checking permissions
 - [ ] Add bulk transaction import from file
