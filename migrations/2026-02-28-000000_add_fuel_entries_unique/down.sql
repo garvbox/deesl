@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_fuel_entries_vehicle_mileage_datetime;

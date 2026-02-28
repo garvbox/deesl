@@ -32,6 +32,7 @@ watch(
       <nav v-if="isLoggedIn" class="main-nav">
         <RouterLink to="/">Dashboard</RouterLink>
         <RouterLink to="/vehicles">Vehicles</RouterLink>
+        <RouterLink to="/import">Import</RouterLink>
       </nav>
       <span v-if="isLoggedIn" class="user-info">{{ email }}</span>
       <span v-else>Please log in</span>

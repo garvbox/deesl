@@ -7,4 +7,4 @@
 - [x] Vehicle sharing with other users (with read/write permission levels)
 - [x] Security: Should the frontend be using query params? JWTs were intended
 - [x] Backend: Add better integration tests using proper tokens and checking permissions
-- [ ] Add bulk transaction import from file
+- [x] Add bulk transaction import from file

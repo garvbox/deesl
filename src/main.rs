@@ -19,7 +19,8 @@ use tracing::info;
 use utoipa::OpenApi;
 
 use deesl::{
-    AppState, api_doc, oauth_handlers, user_handlers, vehicle_fuel_handlers, vehicle_share_handlers,
+    AppState, api_doc, import_handlers, oauth_handlers, user_handlers, vehicle_fuel_handlers,
+    vehicle_share_handlers,
 };
 
 async fn serve_openapi() -> axum::response::Json<String> {
@@ -116,6 +117,7 @@ async fn main() {
         .merge(user_handlers::router())
         .merge(vehicle_fuel_handlers::router())
         .merge(vehicle_share_handlers::router())
+        .merge(import_handlers::router())
         .nest_service("/assets", ServeDir::new("src/pkg/assets"))
         .fallback(serve_index)
         .layer(middleware::from_fn(add_cache_control_headers))

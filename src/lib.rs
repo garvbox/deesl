@@ -1,6 +1,7 @@
 pub mod api_doc;
 pub mod auth;
 pub mod handlers;
+pub mod import_handlers;
 pub mod models;
 pub mod oauth_handlers;
 pub mod schema;
