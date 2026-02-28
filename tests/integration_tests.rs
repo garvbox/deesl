@@ -1086,11 +1086,10 @@ async fn test_import_rejects_oversized_file(
     let row = "03/05/2025,12:52:00,Circle K Mitchelstown,53.71,84.59,255552\n";
     let rows_needed = (6 * 1024 * 1024) / row.len() + 1; // Ensure we exceed 5MB
     let csv_content: Vec<u8> =
-        std::iter::repeat_n(row, rows_needed)
-            .fold(header.as_bytes().to_vec(), |mut acc, r| {
-                acc.extend_from_slice(r.as_bytes());
-                acc
-            });
+        std::iter::repeat_n(row, rows_needed).fold(header.as_bytes().to_vec(), |mut acc, r| {
+            acc.extend_from_slice(r.as_bytes());
+            acc
+        });
 
     let response = common::post_import_csv(
         &app,
@@ -1104,7 +1103,8 @@ async fn test_import_rejects_oversized_file(
 
     // Should be rejected - either by our size check (413) or multipart parsing (400)
     assert!(
-        response.status() == StatusCode::PAYLOAD_TOO_LARGE || response.status() == StatusCode::BAD_REQUEST,
+        response.status() == StatusCode::PAYLOAD_TOO_LARGE
+            || response.status() == StatusCode::BAD_REQUEST,
         "Expected 413 or 400, got {:?}",
         response.status()
     );

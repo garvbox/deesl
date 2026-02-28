@@ -118,7 +118,7 @@ pub async fn delete(app: &Router, path: &str, token: &str) -> Response<Body> {
     app.clone().oneshot(request).await.unwrap()
 }
 
-/// Makes an authenticated multipart POST request for CSV import
+/// Makes an authenticated multipart POST request for CSV import using axum-test
 pub async fn post_import_csv(
     app: &Router,
     path: &str,
@@ -127,55 +127,36 @@ pub async fn post_import_csv(
     csv_content: &[u8],
     mappings: Option<serde_json::Value>,
 ) -> Response<Body> {
-    use std::io::Write;
+    use axum_test::TestServer;
+    use axum_test::multipart::{MultipartForm, Part};
 
-    let mut body: Vec<u8> = Vec::new();
+    let server = TestServer::new(app.clone().into_make_service()).unwrap();
 
-    // vehicle_id field
-    write!(&mut body, "------WebKitFormBoundary7MA4YWxkTrZu0gW\r\n").unwrap();
-    write!(
-        &mut body,
-        "Content-Disposition: form-data; name=\"vehicle_id\"\r\n\r\n"
-    )
-    .unwrap();
-    write!(&mut body, "{}\r\n", vehicle_id).unwrap();
+    let mut form = MultipartForm::new()
+        .add_part("vehicle_id", Part::text(vehicle_id.to_string()))
+        .add_part(
+            "file",
+            Part::bytes(csv_content.to_vec()).file_name("test.csv"),
+        );
 
-    // file field
-    write!(&mut body, "------WebKitFormBoundary7MA4YWxkTrZu0gW\r\n").unwrap();
-    write!(
-        &mut body,
-        "Content-Disposition: form-data; name=\"file\"; filename=\"test.csv\"\r\n"
-    )
-    .unwrap();
-    write!(&mut body, "Content-Type: text/csv\r\n\r\n").unwrap();
-    body.extend_from_slice(csv_content);
-    write!(&mut body, "\r\n").unwrap();
-
-    // mappings field (if provided)
     if let Some(mappings) = mappings {
-        write!(&mut body, "------WebKitFormBoundary7MA4YWxkTrZu0gW\r\n").unwrap();
-        write!(
-            &mut body,
-            "Content-Disposition: form-data; name=\"mappings\"\r\n\r\n"
-        )
-        .unwrap();
-        write!(&mut body, "{}\r\n", mappings).unwrap();
+        form = form.add_part("mappings", Part::text(mappings.to_string()));
     }
 
-    // End boundary
-    write!(&mut body, "------WebKitFormBoundary7MA4YWxkTrZu0gW--\r\n").unwrap();
+    let response = server
+        .post(path)
+        .add_header("Cookie", format!("auth_token={}", token))
+        .multipart(form)
+        .await;
 
-    let content_type = "multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW";
+    // Convert axum-test response to standard Response<Body>
+    let status = response.status_code();
+    let body_bytes = response.as_bytes().to_vec();
 
-    let request = Request::builder()
-        .method(http::Method::POST)
-        .uri(path)
-        .header(http::header::COOKIE, format!("auth_token={}", token))
-        .header(http::header::CONTENT_TYPE, content_type)
-        .body(Body::from(body))
-        .unwrap();
-
-    app.clone().oneshot(request).await.unwrap()
+    Response::builder()
+        .status(status)
+        .body(Body::from(body_bytes))
+        .unwrap()
 }
 
 /// Creates a test user in the database
