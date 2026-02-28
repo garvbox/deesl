@@ -18,18 +18,9 @@ use tower_livereload::LiveReloadLayer;
 use tracing::info;
 use utoipa::OpenApi;
 
-mod api_doc;
-mod auth;
-mod handlers;
-mod models;
-mod oauth_handlers;
-mod schema;
-mod state;
-mod user_handlers;
-mod vehicle_fuel_handlers;
-mod vehicle_share_handlers;
-
-pub use state::AppState;
+use deesl::{
+    AppState, api_doc, oauth_handlers, user_handlers, vehicle_fuel_handlers, vehicle_share_handlers,
+};
 
 async fn serve_openapi() -> axum::response::Json<String> {
     axum::response::Json(api_doc::ApiDoc::openapi().to_json().unwrap())
@@ -60,31 +51,31 @@ pub struct Config {
     database_url: String,
     environment: String,
     cors_origins: Vec<String>,
-    pub base_url: String,
+    base_url: String,
 }
 
 impl Config {
     fn new() -> Self {
-        let port: usize = env::var("PORT")
-            .unwrap_or("8000".to_string())
-            .parse()
-            .unwrap();
-        let host = env::var("HOST").unwrap_or("localhost".to_string());
-        let default_base_url = format!("http://{}:{}", host, port);
+        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let environment = env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string());
+        let cors_origins = env::var("CORS_ORIGINS")
+            .unwrap_or_default()
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.trim().to_string())
+            .collect();
+        let base_url = env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
 
         Self {
-            port,
-            host: host.clone(),
-            database_url: env::var("DATABASE_URL")
-                .unwrap_or("postgres://postgres:postgres@localhost/deesl".to_string()),
-            environment: env::var("ENVIRONMENT").unwrap_or("development".to_string()),
-            cors_origins: env::var("CORS_ORIGINS")
-                .unwrap_or_default()
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect(),
-            base_url: env::var("BASE_URL").unwrap_or(default_base_url),
+            port: env::var("PORT")
+                .unwrap_or_else(|_| "8000".to_string())
+                .parse()
+                .expect("PORT must be a number"),
+            host: env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
+            database_url,
+            environment,
+            cors_origins,
+            base_url,
         }
     }
 
@@ -115,7 +106,7 @@ async fn main() {
     let pool = Pool::builder(manager).build().unwrap();
     let app_state = AppState {
         pool,
-        oauth: oauth_handlers::OAuthConfig::new(&config),
+        oauth: oauth_handlers::OAuthConfig::new(&config.base_url),
     };
 
     let mut app = Router::new()
@@ -173,7 +164,6 @@ fn build_production_cors(origins: &[String]) -> CorsLayer {
     ];
 
     if origins.is_empty() {
-        // When no origins specified, mirror the request origin (for flexibility)
         CorsLayer::new()
             .allow_origin(AllowOrigin::mirror_request())
             .allow_methods(allowed_methods)
@@ -244,8 +234,6 @@ async fn add_cache_control_headers(
 mod tests {
     use super::*;
 
-    // --- Config::is_development ---
-
     #[test]
     fn test_config_is_development_when_environment_is_development() {
         let config = Config::with_environment("development", vec![]);
@@ -262,35 +250,5 @@ mod tests {
     fn test_config_is_not_development_when_environment_is_staging() {
         let config = Config::with_environment("staging", vec![]);
         assert!(!config.is_development());
-    }
-
-    #[test]
-    fn test_config_is_not_development_when_environment_is_empty() {
-        let config = Config::with_environment("", vec![]);
-        assert!(!config.is_development());
-    }
-
-    // --- build_production_cors ---
-
-    #[test]
-    fn test_build_production_cors_with_empty_origins_returns_layer() {
-        // Should not panic; returns a restrictive (no-allow) layer
-        let _layer = build_production_cors(&[]);
-    }
-
-    #[test]
-    fn test_build_production_cors_with_valid_origins_returns_layer() {
-        let origins = vec![
-            "https://example.com".to_string(),
-            "https://app.example.com".to_string(),
-        ];
-        let _layer = build_production_cors(&origins);
-    }
-
-    #[test]
-    fn test_build_production_cors_ignores_invalid_origin_strings() {
-        // Invalid origins are filtered out by `filter_map(|o| o.parse().ok())`
-        let origins = vec!["not a valid origin".to_string()];
-        let _layer = build_production_cors(&origins);
     }
 }

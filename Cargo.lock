@@ -436,7 +436,7 @@ dependencies = [
 
 [[package]]
 name = "deesl"
-version = "0.3.5"
+version = "0.3.6"
 dependencies = [
  "askama",
  "axum",
@@ -456,6 +456,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-util",
+ "tower",
  "tower-cookies",
  "tower-http",
  "tower-livereload",

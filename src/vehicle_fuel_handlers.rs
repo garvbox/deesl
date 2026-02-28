@@ -3,7 +3,7 @@ use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    routing::{delete, get},
+    routing::{delete, get, put},
 };
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
@@ -28,10 +28,15 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/api/fuel-entries/{id}",
-            get(get_fuel_entry).delete(delete_fuel_entry),
+            get(get_fuel_entry)
+                .put(update_fuel_entry)
+                .delete(delete_fuel_entry),
         )
         .route("/api/vehicles", get(list_vehicles).post(create_vehicle))
-        .route("/api/vehicles/{id}", delete(delete_vehicle))
+        .route(
+            "/api/vehicles/{id}",
+            put(update_vehicle).delete(delete_vehicle),
+        )
 }
 
 #[derive(serde::Serialize)]
@@ -315,6 +320,66 @@ pub async fn create_vehicle(
 
     Ok((
         StatusCode::CREATED,
+        Json(VehicleResponse::from_vehicle(
+            vehicle,
+            false,
+            Some("owner".to_string()),
+        )),
+    ))
+}
+
+#[derive(Deserialize)]
+pub struct UpdateVehicleRequest {
+    pub make: String,
+    pub model: String,
+    pub registration: String,
+}
+
+pub async fn update_vehicle(
+    State(pool): State<Pool>,
+    headers: HeaderMap,
+    axum::extract::Path(id): axum::extract::Path<i32>,
+    Json(payload): Json<UpdateVehicleRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let auth_user = extract_auth_user(&headers)?;
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = auth_user.user_id;
+
+    let make = payload.make.clone();
+    let model = payload.model.clone();
+    let registration = payload.registration.clone();
+
+    // Check ownership before updating
+    let vehicle: Vehicle = conn
+        .interact(move |conn| {
+            let _vehicle: Vehicle = vehicles::table
+                .filter(vehicles::id.eq(id))
+                .filter(vehicles::owner_id.eq(user_id))
+                .first(conn)
+                .optional()?
+                .ok_or(diesel::result::Error::NotFound)?;
+
+            // Update the vehicle
+            diesel::update(vehicles::table.filter(vehicles::id.eq(id)))
+                .set((
+                    vehicles::make.eq(make),
+                    vehicles::model.eq(model),
+                    vehicles::registration.eq(registration),
+                ))
+                .returning(Vehicle::as_returning())
+                .get_result(conn)
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|_| {
+            (
+                StatusCode::FORBIDDEN,
+                "You don't own this vehicle".to_string(),
+            )
+        })?;
+
+    Ok((
+        StatusCode::OK,
         Json(VehicleResponse::from_vehicle(
             vehicle,
             false,
@@ -654,6 +719,94 @@ pub async fn create_fuel_entry(
 
     Ok((
         StatusCode::CREATED,
+        Json(FuelEntryResponse {
+            id: entry.id,
+            vehicle_id: entry.vehicle_id,
+            vehicle_make: vehicle.make,
+            vehicle_model: vehicle.model,
+            vehicle_registration: vehicle.registration,
+            station_id: entry.station_id,
+            station_name: None,
+            mileage_km: entry.mileage_km,
+            litres: entry.litres,
+            cost: entry.cost,
+            filled_at: entry.filled_at,
+        }),
+    ))
+}
+
+#[derive(Deserialize)]
+pub struct UpdateFuelEntryRequest {
+    pub mileage_km: i32,
+    pub litres: f64,
+    pub cost: f64,
+    pub station_id: Option<i32>,
+}
+
+pub async fn update_fuel_entry(
+    State(pool): State<Pool>,
+    headers: HeaderMap,
+    axum::extract::Path(id): axum::extract::Path<i32>,
+    Json(payload): Json<UpdateFuelEntryRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let auth_user = extract_auth_user(&headers)?;
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = auth_user.user_id;
+
+    // Check if user has write access to this vehicle and update the entry
+    let (entry, vehicle): (FuelEntry, Vehicle) = conn
+        .interact(move |conn| {
+            let entry: FuelEntry = fuel_entries::table
+                .filter(fuel_entries::id.eq(id))
+                .first(conn)
+                .optional()?
+                .ok_or(diesel::result::Error::NotFound)?;
+
+            let vehicle: Vehicle = vehicles::table
+                .filter(vehicles::id.eq(entry.vehicle_id))
+                .first(conn)?;
+
+            // Check if user has write access
+            let has_write = if vehicle.owner_id == user_id {
+                true
+            } else {
+                let share = vehicle_shares::table
+                    .filter(vehicle_shares::vehicle_id.eq(vehicle.id))
+                    .filter(vehicle_shares::shared_with_user_id.eq(user_id))
+                    .first::<crate::models::VehicleShare>(conn)
+                    .optional()?;
+
+                matches!(share, Some(s) if s.permission_level == "write")
+            };
+
+            if !has_write {
+                return Err(diesel::result::Error::NotFound);
+            }
+
+            // Update the fuel entry
+            let updated_entry = diesel::update(fuel_entries::table.filter(fuel_entries::id.eq(id)))
+                .set((
+                    fuel_entries::mileage_km.eq(payload.mileage_km),
+                    fuel_entries::litres.eq(payload.litres),
+                    fuel_entries::cost.eq(payload.cost),
+                    fuel_entries::station_id.eq(payload.station_id),
+                ))
+                .returning(FuelEntry::as_returning())
+                .get_result(conn)?;
+
+            Ok((updated_entry, vehicle))
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|_| {
+            (
+                StatusCode::FORBIDDEN,
+                "You don't have write permission to edit this entry".to_string(),
+            )
+        })?;
+
+    Ok((
+        StatusCode::OK,
         Json(FuelEntryResponse {
             id: entry.id,
             vehicle_id: entry.vehicle_id,

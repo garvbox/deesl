@@ -13,7 +13,6 @@ use oauth2::{
 use serde::Deserialize;
 use std::env;
 
-use crate::Config;
 use crate::auth::AuthConfig;
 use crate::handlers::internal_error;
 use crate::models::User;
@@ -48,11 +47,11 @@ pub struct OAuthConfig {
 }
 
 impl OAuthConfig {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(base_url: &str) -> Self {
         let client_id = env::var("GOOGLE_CLIENT_ID").expect("GOOGLE_CLIENT_ID must be set");
         let client_secret =
             env::var("GOOGLE_CLIENT_SECRET").expect("GOOGLE_CLIENT_SECRET must be set");
-        let redirect_url = format!("{}/api/auth/google/callback", config.base_url);
+        let redirect_url = format!("{}/api/auth/google/callback", base_url);
 
         let client = BasicClient::new(
             ClientId::new(client_id),
@@ -65,6 +64,26 @@ impl OAuthConfig {
             ),
         )
         .set_redirect_uri(RedirectUrl::new(redirect_url).expect("Invalid redirect URL"));
+
+        Self { client }
+    }
+
+    pub fn test_config() -> Self {
+        // Create a dummy client for testing (won't be used for actual OAuth flow)
+        let client = BasicClient::new(
+            ClientId::new("test-client-id".to_string()),
+            Some(ClientSecret::new("test-client-secret".to_string())),
+            AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".to_string())
+                .expect("Invalid auth URL"),
+            Some(
+                TokenUrl::new("https://oauth2.googleapis.com/token".to_string())
+                    .expect("Invalid token URL"),
+            ),
+        )
+        .set_redirect_uri(
+            RedirectUrl::new("http://localhost:8000/api/auth/google/callback".to_string())
+                .expect("Invalid redirect URL"),
+        );
 
         Self { client }
     }
