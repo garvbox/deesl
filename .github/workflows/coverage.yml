@@ -36,13 +36,29 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci"
+
+      - name: Cache cargo tools
+        id: cache-cargo-tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-tarpaulin
+            ~/.cargo/bin/diesel
+          key: ${{ runner.os }}-cargo-tools-v2
+
       - name: Install tarpaulin
+        if: steps.cache-cargo-tools.outputs.cache-hit != 'true'
         run: cargo install cargo-tarpaulin
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libpq-dev
 
       - name: Install diesel_cli
+        if: steps.cache-cargo-tools.outputs.cache-hit != 'true'
         run: cargo install diesel_cli --no-default-features --features postgres
 
       - name: Run database migrations
