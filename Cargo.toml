@@ -11,8 +11,6 @@ path = "src/lib.rs"
 name = "deesl"
 path = "src/main.rs"
 
-[features]
-
 [dependencies]
 askama = "0.12.1"
 axum = { version = "0.8.1", features = ["json", "tokio", "form"] }

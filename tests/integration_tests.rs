@@ -86,9 +86,7 @@ async fn test_auth_rejects_requests_with_invalid_token() {
 #[rstest]
 #[tokio::test]
 async fn test_auth_accepts_valid_token(
-    #[future]
-    #[allow(unused)]
-    test_env: (
+    #[future] test_env: (
         common::TestUser,
         axum::Router,
         deadpool_diesel::postgres::Pool,
@@ -103,9 +101,7 @@ async fn test_auth_accepts_valid_token(
 #[rstest]
 #[tokio::test]
 async fn test_vehicle_owner_can_create_vehicle(
-    #[future]
-    #[allow(unused)]
-    test_env: (
+    #[future] test_env: (
         common::TestUser,
         axum::Router,
         deadpool_diesel::postgres::Pool,
@@ -153,9 +149,7 @@ async fn test_vehicle_owner_can_create_vehicle(
 #[rstest]
 #[tokio::test]
 async fn test_vehicle_owner_can_list_their_vehicles(
-    #[future]
-    #[allow(unused)]
-    test_env: (
+    #[future] test_env: (
         common::TestUser,
         axum::Router,
         deadpool_diesel::postgres::Pool,
@@ -177,9 +171,7 @@ async fn test_vehicle_owner_can_list_their_vehicles(
 #[rstest]
 #[tokio::test]
 async fn test_user_cannot_modify_other_users_vehicles(
-    #[future]
-    #[allow(unused)]
-    two_user_env: (
+    #[future] two_user_env: (
         common::TestUser,
         common::TestUser,
         axum::Router,
@@ -213,9 +205,7 @@ async fn test_user_cannot_modify_other_users_vehicles(
 #[rstest]
 #[tokio::test]
 async fn test_read_only_user_cannot_edit_fuel_entries(
-    #[future]
-    #[allow(unused)]
-    two_user_env: (
+    #[future] two_user_env: (
         common::TestUser,
         common::TestUser,
         axum::Router,
@@ -258,9 +248,7 @@ async fn test_read_only_user_cannot_edit_fuel_entries(
 #[rstest]
 #[tokio::test]
 async fn test_write_user_can_edit_fuel_entries(
-    #[future]
-    #[allow(unused)]
-    two_user_env: (
+    #[future] two_user_env: (
         common::TestUser,
         common::TestUser,
         axum::Router,
@@ -309,9 +297,7 @@ async fn test_write_user_can_edit_fuel_entries(
 #[rstest]
 #[tokio::test]
 async fn test_user_cannot_delete_other_users_vehicles(
-    #[future]
-    #[allow(unused)]
-    two_user_env: (
+    #[future] two_user_env: (
         common::TestUser,
         common::TestUser,
         axum::Router,
@@ -337,9 +323,7 @@ async fn test_user_cannot_delete_other_users_vehicles(
 #[rstest]
 #[tokio::test]
 async fn test_shared_user_can_view_vehicle_with_read_permission(
-    #[future]
-    #[allow(unused)]
-    two_user_env: (
+    #[future] two_user_env: (
         common::TestUser,
         common::TestUser,
         axum::Router,
@@ -369,9 +353,7 @@ async fn test_shared_user_can_view_vehicle_with_read_permission(
 #[rstest]
 #[tokio::test]
 async fn test_shared_user_can_view_fuel_entries_with_read_permission(
-    #[future]
-    #[allow(unused)]
-    two_user_env: (
+    #[future] two_user_env: (
         common::TestUser,
         common::TestUser,
         axum::Router,
@@ -419,9 +401,7 @@ async fn test_shared_user_can_view_fuel_entries_with_read_permission(
 #[rstest]
 #[tokio::test]
 async fn test_read_only_user_cannot_add_fuel_entries(
-    #[future]
-    #[allow(unused)]
-    two_user_env: (
+    #[future] two_user_env: (
         common::TestUser,
         common::TestUser,
         axum::Router,
@@ -454,9 +434,7 @@ async fn test_read_only_user_cannot_add_fuel_entries(
 #[rstest]
 #[tokio::test]
 async fn test_read_only_user_cannot_delete_fuel_entries(
-    #[future]
-    #[allow(unused)]
-    two_user_env: (
+    #[future] two_user_env: (
         common::TestUser,
         common::TestUser,
         axum::Router,
@@ -491,9 +469,7 @@ async fn test_read_only_user_cannot_delete_fuel_entries(
 #[rstest]
 #[tokio::test]
 async fn test_write_user_can_add_fuel_entries(
-    #[future]
-    #[allow(unused)]
-    two_user_env: (
+    #[future] two_user_env: (
         common::TestUser,
         common::TestUser,
         axum::Router,
@@ -525,9 +501,7 @@ async fn test_write_user_can_add_fuel_entries(
 #[rstest]
 #[tokio::test]
 async fn test_write_user_can_delete_fuel_entries(
-    #[future]
-    #[allow(unused)]
-    two_user_env: (
+    #[future] two_user_env: (
         common::TestUser,
         common::TestUser,
         axum::Router,
@@ -562,9 +536,7 @@ async fn test_write_user_can_delete_fuel_entries(
 #[rstest]
 #[tokio::test]
 async fn test_only_owner_can_create_shares(
-    #[future]
-    #[allow(unused)]
-    two_user_env: (
+    #[future] two_user_env: (
         common::TestUser,
         common::TestUser,
         axum::Router,
@@ -593,9 +565,7 @@ async fn test_only_owner_can_create_shares(
 #[rstest]
 #[tokio::test]
 async fn test_owner_can_create_and_delete_shares(
-    #[future]
-    #[allow(unused)]
-    two_user_env: (
+    #[future] two_user_env: (
         common::TestUser,
         common::TestUser,
         axum::Router,
@@ -634,9 +604,7 @@ async fn test_owner_can_create_and_delete_shares(
 #[rstest]
 #[tokio::test]
 async fn test_non_owner_cannot_delete_shares(
-    #[future]
-    #[allow(unused)]
-    two_user_env: (
+    #[future] two_user_env: (
         common::TestUser,
         common::TestUser,
         axum::Router,
@@ -675,9 +643,7 @@ async fn test_non_owner_cannot_delete_shares(
 #[rstest]
 #[tokio::test]
 async fn test_shared_vehicle_shows_in_shared_list(
-    #[future]
-    #[allow(unused)]
-    two_user_env: (
+    #[future] two_user_env: (
         common::TestUser,
         common::TestUser,
         axum::Router,
@@ -712,9 +678,7 @@ async fn test_shared_vehicle_shows_in_shared_list(
 #[rstest]
 #[tokio::test]
 async fn test_owner_can_list_their_shares(
-    #[future]
-    #[allow(unused)]
-    two_user_env: (
+    #[future] two_user_env: (
         common::TestUser,
         common::TestUser,
         axum::Router,
