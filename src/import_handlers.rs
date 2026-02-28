@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use crate::AppState;
 use crate::auth::extract_auth_user;
 use crate::handlers::internal_error;
-use crate::models::{FuelEntry, FuelStation, NewFuelEntry, NewFuelStation, Vehicle};
+use crate::models::{FuelStation, NewFuelEntry, NewFuelStation, Vehicle};
 use crate::schema::{fuel_entries, fuel_stations, vehicle_shares, vehicles};
 
 pub fn router() -> Router<AppState> {
@@ -523,8 +523,7 @@ pub async fn execute_import(
                             cost: row.cost,
                             filled_at: Some(row.filled_at),
                         })
-                        .returning(FuelEntry::as_returning())
-                        .get_result(conn)
+                        .execute(conn)
                     {
                         Ok(_) => imported += 1,
                         Err(DieselError::DatabaseError(
