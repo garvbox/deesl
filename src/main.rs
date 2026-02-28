@@ -1,4 +1,7 @@
-use axum::{Router, http::Method, http::header, routing::get};
+use axum::{
+    Router, http::Method, http::Request, http::header, middleware, response::IntoResponse,
+    routing::get,
+};
 use deadpool_diesel::postgres::{Manager, Pool};
 use http_security_headers::{
     ContentSecurityPolicy, CrossOriginEmbedderPolicy, CrossOriginOpenerPolicy,
@@ -37,8 +40,17 @@ async fn serve_version() -> axum::response::Json<serde_json::Value> {
     axum::response::Json(serde_json::json!({ "version": VERSION }))
 }
 
-async fn serve_index() -> impl axum::response::IntoResponse {
-    axum::response::Html(include_str!("pkg/index.html"))
+async fn serve_index() -> impl IntoResponse {
+    match tokio::fs::read_to_string("src/pkg/index.html").await {
+        Ok(content) => axum::response::Html(content),
+        Err(err) => {
+            tracing::error!("Failed to read index.html: {}", err);
+            axum::response::Html(
+                "<h1>Server Error</h1><p>Failed to load application. Please try again later.</p>"
+                    .to_string(),
+            )
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -115,6 +127,7 @@ async fn main() {
         .merge(vehicle_share_handlers::router())
         .nest_service("/assets", ServeDir::new("src/pkg/assets"))
         .fallback(serve_index)
+        .layer(middleware::from_fn(add_cache_control_headers))
         .layer(TraceLayer::new_for_http())
         .with_state(app_state);
 
@@ -201,6 +214,30 @@ fn build_security_headers() -> SecurityHeadersLayer {
         .unwrap();
 
     SecurityHeadersLayer::new(Arc::new(headers))
+}
+
+async fn add_cache_control_headers(
+    request: Request<axum::body::Body>,
+    next: middleware::Next,
+) -> impl IntoResponse {
+    let path = request.uri().path().to_owned();
+    let mut response = next.run(request).await;
+
+    let cache_header = if path == "/assets/manifest.json" {
+        // Manifest changes every build - never cache
+        "no-cache, no-store, must-revalidate"
+    } else if path.starts_with("/assets/") && path.contains('-') {
+        // Hashed assets (e.g., index-BN4_6Tgn.js) - cache forever
+        "public, max-age=31536000, immutable"
+    } else {
+        // Everything else - use browser defaults
+        return response;
+    };
+
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, cache_header.parse().unwrap());
+    response
 }
 
 #[cfg(test)]

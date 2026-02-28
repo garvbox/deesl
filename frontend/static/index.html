@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Deesl Fuel Tracker</title>
+    <script>
+      (function() {
+        // Fetch manifest and dynamically load assets
+        fetch('/assets/manifest.json')
+          .then(function(response) {
+            if (!response.ok) throw new Error('Failed to load manifest');
+            return response.json();
+          })
+          .then(function(manifest) {
+            var mainEntry = manifest['src/main.js'];
+            if (!mainEntry) {
+              console.error('Could not find main entry in manifest');
+              return;
+            }
+
+            // Inject CSS first
+            if (mainEntry.css) {
+              mainEntry.css.forEach(function(cssPath) {
+                var link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.crossOrigin = true;
+                link.href = '/' + cssPath;
+                document.head.appendChild(link);
+              });
+            }
+
+            // Then inject JS module
+            var script = document.createElement('script');
+            script.type = 'module';
+            script.crossOrigin = true;
+            script.src = '/' + mainEntry.file;
+            document.head.appendChild(script);
+          })
+          .catch(function(err) {
+            console.error('Failed to load application:', err);
+            document.body.innerHTML = '<p style="padding: 2rem; text-align: center;">Failed to load application. Please refresh the page.</p>';
+          });
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
