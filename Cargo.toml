@@ -12,7 +12,6 @@ name = "deesl"
 path = "src/main.rs"
 
 [features]
-test-utils = []
 
 [dependencies]
 askama = "0.12.1"

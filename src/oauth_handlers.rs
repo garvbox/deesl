@@ -68,7 +68,6 @@ impl OAuthConfig {
         Self { client }
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
     pub fn test_config() -> Self {
         // Create a dummy client for testing (won't be used for actual OAuth flow)
         let client = BasicClient::new(
