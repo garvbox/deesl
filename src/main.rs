@@ -1,5 +1,5 @@
 use axum::{
-    Router, http::Method, http::Request, http::header, middleware, response::IntoResponse,
+    Router, http::Method, http::header,
     routing::{delete, get, post},
 };
 use deadpool_diesel::postgres::{Manager, Pool};
@@ -13,7 +13,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tower_http::cors::{AllowOrigin, CorsLayer};
-use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 use tower_livereload::LiveReloadLayer;
 use tracing::info;
@@ -194,8 +193,6 @@ async fn main() {
         .merge(vehicle_fuel_handlers::router())
         .merge(vehicle_share_handlers::router())
         .merge(import_handlers::router())
-        .fallback_service(ServeDir::new("src/pkg").fallback(ServeFile::new("src/pkg/index.html")))
-        .layer(middleware::from_fn(add_cache_control_headers))
         .layer(TraceLayer::new_for_http())
         .with_state(app_state);
 
@@ -281,30 +278,6 @@ fn build_security_headers() -> SecurityHeadersLayer {
         .unwrap();
 
     SecurityHeadersLayer::new(Arc::new(headers))
-}
-
-async fn add_cache_control_headers(
-    request: Request<axum::body::Body>,
-    next: middleware::Next,
-) -> impl IntoResponse {
-    let path = request.uri().path().to_owned();
-    let mut response = next.run(request).await;
-
-    let cache_header = if path == "/assets/manifest.json" {
-        // Manifest changes every build - never cache
-        "no-cache, no-store, must-revalidate"
-    } else if path.starts_with("/assets/") && path.contains('-') {
-        // Hashed assets (e.g., index-BN4_6Tgn.js) - cache forever
-        "public, max-age=31536000, immutable"
-    } else {
-        // Everything else - use browser defaults
-        return response;
-    };
-
-    response
-        .headers_mut()
-        .insert(header::CACHE_CONTROL, cache_header.parse().unwrap());
-    response
 }
 
 #[cfg(test)]
