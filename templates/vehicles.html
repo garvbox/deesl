@@ -1,0 +1,16 @@
+{% extends "layout.html" %}
+
+{% block title %}Vehicles - Deesl{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1>My Vehicles</h1>
+    <a href="/vehicles/new" class="btn">Add Vehicle</a>
+</div>
+
+<div class="card">
+    <div id="vehicle-list" hx-get="/htmx/vehicles" hx-trigger="load">
+        <p style="color: var(--text-muted);">Loading vehicles...</p>
+    </div>
+</div>
+{% endblock %}

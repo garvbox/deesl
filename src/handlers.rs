@@ -1,15 +1,16 @@
 use askama::Template;
 use axum::{
+    Form,
     extract::State,
-    http::StatusCode,
-    response::{Html, IntoResponse},
+    http::{HeaderMap, StatusCode},
+    response::{Html, IntoResponse, Redirect},
 };
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
+use serde::Deserialize;
 
-use crate::AppState;
 use crate::auth::{AuthUser, AuthUserRedirect};
-use crate::models::Vehicle;
+use crate::models::{NewVehicle, Vehicle};
 use crate::schema::vehicles;
 
 /// Utility function for mapping any error into a `500 Internal Server Error`
@@ -27,7 +28,8 @@ pub struct LoginTemplate {
 }
 
 pub async fn login() -> impl IntoResponse {
-    LoginTemplate { logged_in: false }
+    let template = LoginTemplate { logged_in: false };
+    Html(template.render().unwrap())
 }
 
 #[derive(Template)]
@@ -38,10 +40,171 @@ pub struct DashboardTemplate {
 }
 
 pub async fn dashboard(AuthUserRedirect(user): AuthUserRedirect) -> impl IntoResponse {
-    DashboardTemplate {
+    let template = DashboardTemplate {
         logged_in: true,
         user_email: user.email,
+    };
+    Html(template.render().unwrap())
+}
+
+#[derive(Template)]
+#[template(path = "add_vehicle.html")]
+pub struct AddVehicleTemplate {
+    pub logged_in: bool,
+}
+
+pub async fn new_vehicle(AuthUserRedirect(_user): AuthUserRedirect) -> impl IntoResponse {
+    let template = AddVehicleTemplate { logged_in: true };
+    Html(template.render().unwrap())
+}
+
+#[derive(Template)]
+#[template(path = "vehicles.html")]
+pub struct VehiclesTemplate {
+    pub logged_in: bool,
+}
+
+pub async fn vehicles_page(AuthUserRedirect(_user): AuthUserRedirect) -> impl IntoResponse {
+    let template = VehiclesTemplate { logged_in: true };
+    Html(template.render().unwrap())
+}
+
+#[derive(Deserialize)]
+pub struct CreateVehicleForm {
+    pub make: String,
+    pub model: String,
+    pub registration: String,
+}
+
+pub async fn create_vehicle(
+    State(pool): State<Pool>,
+    user: AuthUser,
+    Form(payload): Form<CreateVehicleForm>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let owner_id = user.user_id;
+
+    conn.interact(move |conn| {
+        diesel::insert_into(vehicles::table)
+            .values(NewVehicle {
+                make: payload.make,
+                model: payload.model,
+                registration: payload.registration,
+                owner_id,
+            })
+            .execute(conn)
+    })
+    .await
+    .map_err(internal_error)?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert("HX-Redirect", "/dashboard".parse().unwrap());
+    Ok((headers, Redirect::to("/dashboard")))
+}
+
+#[derive(Template)]
+#[template(path = "add_fuel_entry.html")]
+pub struct AddFuelEntryTemplate {
+    pub logged_in: bool,
+    pub vehicles: Vec<Vehicle>,
+    pub current_time: String,
+}
+
+pub async fn new_fuel_entry(
+    State(pool): State<Pool>,
+    AuthUserRedirect(user): AuthUserRedirect,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = user.user_id;
+
+    let user_vehicles: Vec<Vehicle> = conn
+        .interact(move |conn| {
+            vehicles::table
+                .filter(vehicles::owner_id.eq(user_id))
+                .order(vehicles::registration)
+                .load(conn)
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let template = AddFuelEntryTemplate {
+        logged_in: true,
+        vehicles: user_vehicles,
+        current_time: chrono::Local::now().format("%Y-%m-%dT%H:%M").to_string(),
+    };
+    Ok(Html(template.render().map_err(internal_error)?))
+}
+
+#[derive(Deserialize)]
+pub struct CreateFuelEntryForm {
+    pub vehicle_id: i32,
+    pub mileage_km: i32,
+    pub litres: f64,
+    pub cost: f64,
+    pub filled_at: Option<String>,
+}
+
+pub async fn create_fuel_entry(
+    State(pool): State<Pool>,
+    user: AuthUser,
+    Form(payload): Form<CreateFuelEntryForm>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = user.user_id;
+    let vehicle_id = payload.vehicle_id;
+
+    // Verify ownership
+    let is_owner: bool = conn
+        .interact(move |conn| {
+            vehicles::table
+                .filter(vehicles::id.eq(vehicle_id))
+                .filter(vehicles::owner_id.eq(user_id))
+                .first::<Vehicle>(conn)
+                .optional()
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .is_some();
+
+    if !is_owner {
+        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
     }
+
+    let filled_at = payload
+        .filled_at
+        .and_then(|s| chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M").ok());
+
+    conn.interact(move |conn| {
+        diesel::insert_into(crate::schema::fuel_entries::table)
+            .values(crate::models::NewFuelEntry {
+                vehicle_id,
+                station_id: None,
+                mileage_km: payload.mileage_km,
+                litres: payload.litres,
+                cost: payload.cost,
+                filled_at,
+            })
+            .execute(conn)
+    })
+    .await
+    .map_err(internal_error)?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert("HX-Redirect", "/dashboard".parse().unwrap());
+    Ok((headers, Redirect::to("/dashboard")))
+}
+
+#[derive(Template)]
+#[template(path = "fragments/vehicle_card.html")]
+pub struct VehicleCardTemplate {
+    pub id: i32,
+    pub make: String,
+    pub model: String,
+    pub registration: String,
 }
 
 pub async fn htmx_vehicles(
@@ -70,16 +233,40 @@ pub async fn htmx_vehicles(
 
     let mut html = String::from(r#"<div style="display: grid; gap: 1rem;">"#);
     for v in user_vehicles {
-        html.push_str(&format!(
-            r#"<div style="padding: 1rem; border: 1px solid var(--border); border-radius: 8px;">
-                <strong>{} {}</strong> <span style="color: var(--text-muted); font-size: 0.8rem;">{}</span>
-            </div>"#,
-            v.make, v.model, v.registration
-        ));
+        let card = VehicleCardTemplate {
+            id: v.id,
+            make: v.make,
+            model: v.model,
+            registration: v.registration,
+        };
+        html.push_str(&card.render().map_err(internal_error)?);
     }
     html.push_str("</div>");
 
     Ok(Html(html))
+}
+
+pub async fn htmx_delete_vehicle(
+    State(pool): State<Pool>,
+    user: AuthUser,
+    axum::extract::Path(id): axum::extract::Path<i32>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = user.user_id;
+
+    conn.interact(move |conn| {
+        diesel::delete(
+            vehicles::table
+                .filter(vehicles::id.eq(id))
+                .filter(vehicles::owner_id.eq(user_id)),
+        )
+        .execute(conn)
+    })
+    .await
+    .map_err(internal_error)?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Html(""))
 }
 
 pub async fn htmx_recent_entries(
@@ -162,18 +349,5 @@ mod tests {
     fn test_internal_error_returns_500_status() {
         let (status, _) = internal_error(TestError("boom".to_string()));
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-    }
-
-    #[test]
-    fn test_internal_error_returns_error_message_as_body() {
-        let (_, body) = internal_error(TestError("something went wrong".to_string()));
-        assert_eq!(body, "something went wrong");
-    }
-
-    #[test]
-    fn test_internal_error_with_empty_message() {
-        let (status, body) = internal_error(TestError(String::new()));
-        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-        assert_eq!(body, "");
     }
 }

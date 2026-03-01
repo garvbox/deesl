@@ -1,6 +1,6 @@
 use axum::{
     Router, http::Method, http::Request, http::header, middleware, response::IntoResponse,
-    routing::get,
+    routing::{delete, get, post},
 };
 use deadpool_diesel::postgres::{Manager, Pool};
 use diesel::prelude::*;
@@ -20,8 +20,8 @@ use tracing::info;
 use utoipa::OpenApi;
 
 use deesl::{
-    AppState, api_doc, auth::DEV_AUTH_EMAIL_KEY, import_handlers, models::NewUser, oauth_handlers,
-    schema::users, user_handlers, vehicle_fuel_handlers, vehicle_share_handlers,
+    AppState, api_doc, auth::DEV_AUTH_EMAIL_KEY, handlers, import_handlers, models::NewUser,
+    oauth_handlers, schema::users, user_handlers, vehicle_fuel_handlers, vehicle_share_handlers,
 };
 
 async fn serve_openapi() -> axum::response::Json<String> {
@@ -176,7 +176,12 @@ async fn main() {
         .route("/", get(|| async { axum::response::Redirect::to("/dashboard") }))
         .route("/login", get(handlers::login))
         .route("/dashboard", get(handlers::dashboard))
+        .route("/vehicles", get(handlers::vehicles_page).post(handlers::create_vehicle))
+        .route("/vehicles/new", get(handlers::new_vehicle))
+        .route("/fuel-entries/new", get(handlers::new_fuel_entry))
+        .route("/fuel-entries", post(handlers::create_fuel_entry))
         .route("/htmx/vehicles", get(handlers::htmx_vehicles))
+        .route("/htmx/vehicles/{id}", delete(handlers::htmx_delete_vehicle))
         .route("/htmx/entries/recent", get(handlers::htmx_recent_entries))
         .route("/api/version", get(serve_version))
         .route("/api/openapi.json", get(serve_openapi))

@@ -5,7 +5,10 @@
 {% block content %}
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
     <h1>Dashboard</h1>
-    <a href="/vehicles/new" class="btn">Add Vehicle</a>
+    <div style="display: flex; gap: 1rem;">
+        <a href="/fuel-entries/new" class="btn btn-outline">Add Fuel Entry</a>
+        <a href="/vehicles/new" class="btn">Add Vehicle</a>
+    </div>
 </div>
 
 <div class="card">

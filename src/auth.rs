@@ -87,7 +87,7 @@ where
 {
     type Rejection = (StatusCode, String);
 
-    async fn from_request_parts(parts: &Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         extract_auth_user(&parts.headers)
     }
 }
@@ -101,7 +101,7 @@ where
 {
     type Rejection = Redirect;
 
-    async fn from_request_parts(parts: &Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         match extract_auth_user(&parts.headers) {
             Ok(user) => Ok(AuthUserRedirect(user)),
             Err(_) => Err(Redirect::to("/login")),
