@@ -170,15 +170,22 @@ pub async fn post_import_csv(
     token: &str,
     vehicle_id: i32,
     csv_content: &[u8],
+    mappings: Option<std::collections::HashMap<String, String>>,
 ) -> TestResponse {
     use axum_test::multipart::{MultipartForm, Part};
 
-    let form = MultipartForm::new()
+    let mut form = MultipartForm::new()
         .add_part("vehicle_id", Part::text(vehicle_id.to_string()))
         .add_part(
             "file",
             Part::bytes(csv_content.to_vec()).file_name("test.csv"),
         );
+
+    if let Some(m) = mappings {
+        for (k, v) in m {
+            form = form.add_part(k, Part::text(v));
+        }
+    }
 
     server
         .post(path)
