@@ -20,13 +20,14 @@ services:
     build: .
     container_name: app
     environment:
-      DATABASE_URL: postgres://postgres:postgres@db:5432/deesl
-      HOST: 0.0.0.0
-      PORT: 8000
-      ENVIRONMENT: production
-      CORS_ORIGINS: ""
+      BASE_URL: ${BASE_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS:-""}
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@db:5432/deesl}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     ports:
-      - "8000:8000"
+      - "8080:8000"
     depends_on:
       db:
         condition: service_healthy
