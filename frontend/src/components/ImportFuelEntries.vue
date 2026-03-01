@@ -30,7 +30,11 @@ const canProceedToMapping = computed(() => {
 });
 
 const canProceedToPreview = computed(() => {
-  return mappings.value.filled_at_date && mappings.value.litres && mappings.value.cost && mappings.value.mileage_km;
+  const mappedFields = Object.values(mappings.value);
+  return mappedFields.includes('filled_at_date') &&
+         mappedFields.includes('litres') &&
+         mappedFields.includes('cost') &&
+         mappedFields.includes('mileage_km');
 });
 
 function handleFileChange(event) {
