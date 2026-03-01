@@ -1,16 +1,4 @@
 ###########################################
-# -- Frontend builder stage --
-FROM node:22-alpine AS frontend-builder
-
-WORKDIR /app/frontend
-
-COPY frontend/package*.json ./
-RUN npm ci
-
-COPY frontend/ ./
-RUN npm run build
-
-###########################################
 # -- Backend Builder Stage --
 FROM rust:bookworm AS builder
 
@@ -50,7 +38,6 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY --from=builder /app/target/release/deesl /app/deesl
-COPY --from=frontend-builder /app/src/pkg /app/src/pkg
 COPY --from=builder /app/migrations /app/migrations
 COPY --from=builder /app/diesel.toml /app/diesel.toml
 COPY --from=builder /usr/local/cargo/bin/diesel /usr/local/bin/diesel

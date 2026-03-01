@@ -1,19 +1,15 @@
 use axum::Router;
-use axum::body::Body;
-use axum::http::{self, Request, Response};
 use deadpool_diesel::postgres::{Manager, Pool};
 use diesel::prelude::*;
-use tower::ServiceExt;
 
 use deesl::auth::AuthConfig;
-use deesl::models::{NewFuelEntry, NewFuelStation, NewUser, NewVehicle, NewVehicleShare};
-use deesl::schema::{fuel_entries, fuel_stations, users, vehicle_shares, vehicles};
+use deesl::models::{NewUser, NewVehicle};
+use deesl::schema::{users, vehicles};
 
 /// Test user data for creating test fixtures
 #[derive(Clone)]
 pub struct TestUser {
     pub id: i32,
-    pub email: String,
     pub token: String,
 }
 
@@ -27,25 +23,42 @@ pub async fn create_test_pool() -> Pool {
 
 /// Creates a test app with the given database pool
 pub async fn create_test_app(pool: Pool) -> Router {
-    use deesl::AppState;
-    use deesl::import_handlers;
+    use axum::routing::{delete, get, post};
+    use deesl::handlers;
     use deesl::oauth_handlers;
-    use deesl::user_handlers;
-    use deesl::vehicle_fuel_handlers;
-    use deesl::vehicle_share_handlers;
     use tower_http::trace::TraceLayer;
 
-    let app_state = AppState {
+    let app_state = deesl::AppState {
         pool,
         oauth: oauth_handlers::OAuthConfig::test_config(),
     };
 
     Router::new()
+        .route(
+            "/",
+            get(|| async { axum::response::Redirect::to("/dashboard") }),
+        )
+        .route("/login", get(handlers::login))
+        .route("/logout", get(oauth_handlers::logout))
+        .route("/dashboard", get(handlers::dashboard))
+        .route(
+            "/settings",
+            get(handlers::settings_page).patch(handlers::update_settings),
+        )
+        .route(
+            "/vehicles",
+            get(handlers::vehicles_page).post(handlers::create_vehicle),
+        )
+        .route("/vehicles/new", get(handlers::new_vehicle))
+        .route("/fuel-entries/new", get(handlers::new_fuel_entry))
+        .route("/fuel-entries", post(handlers::create_fuel_entry))
+        .route("/import", get(handlers::import_page))
+        .route("/htmx/import/preview", post(handlers::htmx_import_preview))
+        .route("/htmx/import/execute", post(handlers::htmx_import_execute))
+        .route("/htmx/vehicles", get(handlers::htmx_vehicles))
+        .route("/htmx/vehicles/{id}", delete(handlers::htmx_delete_vehicle))
+        .route("/htmx/entries/recent", get(handlers::htmx_recent_entries))
         .merge(oauth_handlers::router())
-        .merge(user_handlers::router())
-        .merge(vehicle_fuel_handlers::router())
-        .merge(vehicle_share_handlers::router())
-        .merge(import_handlers::router())
         .layer(TraceLayer::new_for_http())
         .with_state(app_state)
 }
@@ -56,102 +69,8 @@ pub fn create_test_token(user_id: i32, email: &str) -> String {
     auth_config.create_token(user_id, email).unwrap()
 }
 
-/// Makes an authenticated GET request (legacy helper)
-#[allow(dead_code)]
-pub async fn get(app: &Router, path: &str, token: &str) -> Response<Body> {
-    let request = Request::builder()
-        .uri(path)
-        .header(http::header::COOKIE, format!("auth_token={}", token))
-        .body(Body::empty())
-        .unwrap();
-
-    app.clone().oneshot(request).await.unwrap()
-}
-
-/// Makes an authenticated POST request with JSON body (legacy helper)
-#[allow(dead_code)]
-pub async fn post<T: serde::Serialize>(
-    app: &Router,
-    path: &str,
-    token: &str,
-    body: T,
-) -> Response<Body> {
-    let body = serde_json::to_string(&body).unwrap();
-    let request = Request::builder()
-        .method(http::Method::POST)
-        .uri(path)
-        .header(http::header::COOKIE, format!("auth_token={}", token))
-        .header(http::header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    app.clone().oneshot(request).await.unwrap()
-}
-
-/// Makes an authenticated PUT request with JSON body
-#[allow(dead_code)]
-pub async fn put<T: serde::Serialize>(
-    app: &Router,
-    path: &str,
-    token: &str,
-    body: T,
-) -> Response<Body> {
-    let body = serde_json::to_string(&body).unwrap();
-    let request = Request::builder()
-        .method(http::Method::PUT)
-        .uri(path)
-        .header(http::header::COOKIE, format!("auth_token={}", token))
-        .header(http::header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    app.clone().oneshot(request).await.unwrap()
-}
-
-/// Makes an authenticated DELETE request (legacy helper)
-#[allow(dead_code)]
-pub async fn delete(app: &Router, path: &str, token: &str) -> Response<Body> {
-    let request = Request::builder()
-        .method(http::Method::DELETE)
-        .uri(path)
-        .header(http::header::COOKIE, format!("auth_token={}", token))
-        .body(Body::empty())
-        .unwrap();
-
-    app.clone().oneshot(request).await.unwrap()
-}
-
-/// Makes an authenticated multipart POST request for CSV import using axum-test
-pub async fn post_import_csv(
-    server: &TestServer,
-    path: &str,
-    token: &str,
-    vehicle_id: i32,
-    csv_content: &[u8],
-    mappings: Option<serde_json::Value>,
-) -> TestResponse {
-    use axum_test::multipart::{MultipartForm, Part};
-
-    let mut form = MultipartForm::new()
-        .add_part("vehicle_id", Part::text(vehicle_id.to_string()))
-        .add_part(
-            "file",
-            Part::bytes(csv_content.to_vec()).file_name("test.csv"),
-        );
-
-    if let Some(mappings) = mappings {
-        form = form.add_part("mappings", Part::text(mappings.to_string()));
-    }
-
-    server
-        .post(path)
-        .add_header("Cookie", format!("auth_token={}", token))
-        .multipart(form)
-        .await
-}
-
 // ============================================================================
-// NEW AXUM-TEST BASED HELPERS
+// AXUM-TEST BASED HELPERS
 // ============================================================================
 
 use axum_test::TestResponse;
@@ -176,12 +95,6 @@ pub async fn create_test_env() -> TestEnv {
 pub async fn create_test_user(env: &TestEnv, prefix: &str) -> TestUser {
     let email = format!("{}_{}@test.com", prefix, uuid::Uuid::new_v4());
     create_test_user_db(&env.pool, &email).await
-}
-
-/// Parse JSON response from axum-test
-#[allow(dead_code)]
-pub fn parse_json<T: serde::de::DeserializeOwned>(response: &axum_test::TestResponse) -> T {
-    response.json::<T>()
 }
 
 /// Extension trait for TestServer to add authentication
@@ -209,14 +122,6 @@ pub async fn create_test_user_db(pool: &Pool, email: &str) -> TestUser {
                     currency: "EUR".to_string(),
                     google_id: None,
                 })
-                .returning((
-                    users::id,
-                    users::email,
-                    users::password_hash,
-                    users::created_at,
-                    users::currency,
-                    users::google_id,
-                ))
                 .get_result(conn)
         })
         .await
@@ -225,11 +130,7 @@ pub async fn create_test_user_db(pool: &Pool, email: &str) -> TestUser {
 
     let token = create_test_token(user.id, &user.email);
 
-    TestUser {
-        id: user.id,
-        email: user.email,
-        token,
-    }
+    TestUser { id: user.id, token }
 }
 
 /// Creates a test vehicle in the database
@@ -254,14 +155,6 @@ pub async fn create_test_vehicle_db(
                     registration,
                     owner_id,
                 })
-                .returning((
-                    vehicles::id,
-                    vehicles::make,
-                    vehicles::model,
-                    vehicles::registration,
-                    vehicles::created,
-                    vehicles::owner_id,
-                ))
                 .get_result(conn)
         })
         .await
@@ -271,121 +164,32 @@ pub async fn create_test_vehicle_db(
     vehicle.id
 }
 
-/// Creates a vehicle share in the database
-pub async fn create_test_share_db(
-    pool: &Pool,
+pub async fn post_import_csv(
+    server: &TestServer,
+    path: &str,
+    token: &str,
     vehicle_id: i32,
-    shared_with_user_id: i32,
-    permission_level: &str,
-) {
-    let conn = pool.get().await.unwrap();
-    let permission_level = permission_level.to_string();
+    csv_content: &[u8],
+    mappings: Option<std::collections::HashMap<String, String>>,
+) -> TestResponse {
+    use axum_test::multipart::{MultipartForm, Part};
 
-    conn.interact(move |conn| {
-        diesel::insert_into(vehicle_shares::table)
-            .values(NewVehicleShare {
-                vehicle_id,
-                shared_with_user_id,
-                permission_level: Some(permission_level),
-            })
-            .execute(conn)
-    })
-    .await
-    .unwrap()
-    .unwrap();
-}
+    let mut form = MultipartForm::new()
+        .add_part("vehicle_id", Part::text(vehicle_id.to_string()))
+        .add_part(
+            "file",
+            Part::bytes(csv_content.to_vec()).file_name("test.csv"),
+        );
 
-/// Creates a fuel station in the database
-pub async fn create_test_station_db(pool: &Pool, user_id: i32, name: &str) -> i32 {
-    let conn = pool.get().await.unwrap();
-    let name = name.to_string();
+    if let Some(m) = mappings {
+        for (k, v) in m {
+            form = form.add_part(k, Part::text(v));
+        }
+    }
 
-    let station: deesl::models::FuelStation = conn
-        .interact(move |conn| {
-            diesel::insert_into(fuel_stations::table)
-                .values(NewFuelStation {
-                    name,
-                    user_id: Some(user_id),
-                })
-                .returning((
-                    fuel_stations::id,
-                    fuel_stations::name,
-                    fuel_stations::created_at,
-                    fuel_stations::user_id,
-                ))
-                .get_result(conn)
-        })
+    server
+        .post(path)
+        .add_header("Cookie", format!("auth_token={}", token))
+        .multipart(form)
         .await
-        .unwrap()
-        .unwrap();
-
-    station.id
-}
-
-/// Creates a fuel entry in the database
-pub async fn create_test_fuel_entry_db(
-    pool: &Pool,
-    vehicle_id: i32,
-    station_id: Option<i32>,
-    mileage_km: i32,
-    litres: f64,
-    cost: f64,
-) -> i32 {
-    let conn = pool.get().await.unwrap();
-
-    let entry: deesl::models::FuelEntry = conn
-        .interact(move |conn| {
-            diesel::insert_into(fuel_entries::table)
-                .values(NewFuelEntry {
-                    vehicle_id,
-                    station_id,
-                    mileage_km,
-                    litres,
-                    cost,
-                    filled_at: Some(chrono::Utc::now().naive_utc()),
-                })
-                .returning((
-                    fuel_entries::id,
-                    fuel_entries::vehicle_id,
-                    fuel_entries::station_id,
-                    fuel_entries::mileage_km,
-                    fuel_entries::litres,
-                    fuel_entries::cost,
-                    fuel_entries::filled_at,
-                    fuel_entries::created_at,
-                ))
-                .get_result(conn)
-        })
-        .await
-        .unwrap()
-        .unwrap();
-
-    entry.id
-}
-
-/// Cleans up test data (useful for cleanup between tests)
-#[allow(dead_code)]
-pub async fn cleanup_test_data(pool: &Pool) {
-    let conn = pool.get().await.unwrap();
-
-    conn.interact(|conn| {
-        diesel::delete(fuel_entries::table).execute(conn)?;
-        diesel::delete(vehicle_shares::table).execute(conn)?;
-        diesel::delete(fuel_stations::table).execute(conn)?;
-        diesel::delete(vehicles::table).execute(conn)?;
-        diesel::delete(users::table).execute(conn)?;
-        Ok::<_, diesel::result::Error>(())
-    })
-    .await
-    .unwrap()
-    .unwrap();
-}
-
-/// Parses JSON response body (legacy helper)
-#[allow(dead_code)]
-pub async fn parse_json_response<T: serde::de::DeserializeOwned>(response: Response<Body>) -> T {
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    serde_json::from_slice(&body).unwrap()
 }

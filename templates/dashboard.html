@@ -1,0 +1,35 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard - Deesl{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1>Dashboard</h1>
+    <div style="display: flex; gap: 1rem;">
+        <a href="/fuel-entries/new" class="btn btn-outline">Add Fuel Entry</a>
+        <a href="/vehicles/new" class="btn">Add Vehicle</a>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Your Vehicles</h3>
+    <div id="vehicle-list" 
+         hx-get="/htmx/vehicles" 
+         hx-trigger="load"
+         hx-swap="innerHTML"
+         hx-on::error="this.innerHTML = '<p class=\'error\'>Failed to load vehicles. Please try refreshing.</p>'">
+        <p style="color: var(--text-muted);">Loading vehicles...</p>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Recent Fuel Entries</h3>
+    <div id="recent-entries" 
+         hx-get="/htmx/entries/recent" 
+         hx-trigger="load"
+         hx-swap="innerHTML"
+         hx-on::error="this.innerHTML = '<p class=\'error\'>Failed to load recent entries. Please try refreshing.</p>'">
+        <p style="color: var(--text-muted);">Loading recent entries...</p>
+    </div>
+</div>
+{% endblock %}

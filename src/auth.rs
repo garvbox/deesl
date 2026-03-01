@@ -1,4 +1,8 @@
-use axum::http::{HeaderMap, StatusCode};
+use axum::{
+    extract::FromRequestParts,
+    http::{HeaderMap, StatusCode, request::Parts},
+    response::Redirect,
+};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 
@@ -74,46 +78,45 @@ impl AuthConfig {
 #[derive(Debug, Clone)]
 pub struct AuthUser {
     pub user_id: i32,
-    #[allow(dead_code)]
     pub email: String,
 }
 
-pub fn is_dev_auth_bypass_allowed(headers: &HeaderMap) -> Option<String> {
+impl<S> FromRequestParts<S> for AuthUser
+where
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, String);
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        extract_auth_user(&parts.headers)
+    }
+}
+
+/// A wrapper for AuthUser that redirects to /login on failure for standard page requests.
+pub struct AuthUserRedirect(pub AuthUser);
+
+impl<S> FromRequestParts<S> for AuthUserRedirect
+where
+    S: Send + Sync,
+{
+    type Rejection = Redirect;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        match extract_auth_user(&parts.headers) {
+            Ok(user) => Ok(AuthUserRedirect(user)),
+            Err(_) => Err(Redirect::to("/login")),
+        }
+    }
+}
+
+pub fn is_dev_auth_bypass_allowed(_headers: &HeaderMap) -> Option<String> {
     // Layer 1: Compile-time check - only in debug builds
-    // This prevents the bypass from working in release builds (production)
     if cfg!(not(debug_assertions)) {
         return None;
     }
 
-    // Layer 2: DEV_AUTH_EMAIL must be set (this is the bypass trigger)
-    let email = std::env::var(DEV_AUTH_EMAIL_KEY).ok()?;
-
-    // Layer 3: Only allow from localhost (127.0.0.1, ::1, localhost)
-    let is_localhost = headers
-        .get("host")
-        .and_then(|h| h.to_str().ok())
-        .map(|host| {
-            host.starts_with("localhost:")
-                || host.starts_with("127.0.0.1:")
-                || host == "localhost"
-                || host == "127.0.0.1"
-                || host.starts_with("[::1]:")
-                || host == "[::1]"
-        })
-        .unwrap_or(false);
-
-    // Also check X-Forwarded-For if behind a proxy
-    let is_localhost_forwarded = headers
-        .get("x-forwarded-for")
-        .and_then(|h| h.to_str().ok())
-        .map(|ip| ip == "127.0.0.1" || ip == "::1" || ip == "localhost")
-        .unwrap_or(true);
-
-    if is_localhost && is_localhost_forwarded {
-        Some(email)
-    } else {
-        None
-    }
+    // Layer 2: DEV_AUTH_EMAIL must be set
+    std::env::var(DEV_AUTH_EMAIL_KEY).ok()
 }
 
 pub fn extract_auth_user(headers: &HeaderMap) -> Result<AuthUser, (StatusCode, String)> {

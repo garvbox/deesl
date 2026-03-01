@@ -1,0 +1,33 @@
+{% extends "layout.html" %}
+
+{% block title %}Add Vehicle - Deesl{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 500px; margin: 0 auto;">
+    <h1>Add New Vehicle</h1>
+    
+    <form hx-post="/vehicles" hx-target="#vehicle-list-redirect" class="add-vehicle-form">
+        <label>
+            Make
+            <input type="text" name="make" placeholder="e.g. BMW" required>
+        </label>
+        
+        <label>
+            Model
+            <input type="text" name="model" placeholder="e.g. 330d" required>
+        </label>
+        
+        <label>
+            Registration
+            <input type="text" name="registration" placeholder="e.g. 241-D-12345" required>
+        </label>
+        
+        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+            <button type="submit">Add Vehicle</button>
+            <a href="/dashboard" class="btn btn-outline">Cancel</a>
+        </div>
+        
+        <div id="vehicle-list-redirect"></div>
+    </form>
+</div>
+{% endblock %}

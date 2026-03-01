@@ -1,12 +1,12 @@
-
 # Run server with reloading and trace logging enabled
 develop:
     RUST_LOG=deesl=trace,tower_http=debug cargo watch -x run
 
-# Build Vue frontend for production
-build-frontend:
-    cd frontend && npm run build
+# Format all Rust code
+fmt:
+    cargo fmt
 
-# Run Vue dev server with hot reload
-dev-frontend:
-    cd frontend && npm run dev
+# Run all lints (clippy and formatting check)
+lint:
+    cargo fmt -- --check
+    cargo clippy --all-targets --all-features -- -D warnings

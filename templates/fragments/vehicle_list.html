@@ -1,0 +1,24 @@
+{% if vehicles.is_empty() %}
+    <p id="no-vehicles" style="color: var(--text-muted);">No vehicles found. Add one to get started!</p>
+{% else %}
+    <div style="display: grid; gap: 1rem;">
+        {% for v in vehicles %}
+            <div style="padding: 1rem; border: 1px solid var(--border); border-radius: 8px;" id="vehicle-{{ v.id }}">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>{{ v.make }} {{ v.model }}</strong> 
+                        <span style="color: var(--text-muted); font-size: 0.8rem;">{{ v.registration }}</span>
+                    </div>
+                    <button class="btn btn-outline" 
+                            style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-color: var(--error); color: var(--error);"
+                            hx-delete="/htmx/vehicles/{{ v.id }}"
+                            hx-target="#vehicle-{{ v.id }}"
+                            hx-swap="outerHTML"
+                            hx-confirm="Are you sure you want to delete this vehicle?">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}

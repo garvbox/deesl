@@ -230,7 +230,7 @@ pub async fn google_callback(
     resp_headers.insert(header::SET_COOKIE, clear_csrf_cookie.parse().unwrap());
     resp_headers.insert(header::SET_COOKIE, auth_cookie.parse().unwrap());
 
-    Ok((resp_headers, Redirect::to("/")))
+    Ok((resp_headers, Redirect::to("/dashboard")))
 }
 
 #[derive(serde::Serialize)]
@@ -255,7 +255,7 @@ pub async fn logout() -> impl IntoResponse {
     let clear_cookie = build_clear_cookie("auth_token");
     let mut resp_headers = HeaderMap::new();
     resp_headers.insert(header::SET_COOKIE, clear_cookie.parse().unwrap());
-    (StatusCode::OK, resp_headers, "Logged out successfully")
+    (resp_headers, Redirect::to("/login"))
 }
 
 pub(crate) fn extract_cookie(headers: &HeaderMap, name: &str) -> Option<String> {

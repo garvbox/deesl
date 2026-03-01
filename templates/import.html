@@ -1,0 +1,32 @@
+{% extends "layout.html" %}
+
+{% block title %}Import - Deesl{% endblock %}
+
+{% block content %}
+<h1>Import Fuel Entries</h1>
+
+<div class="card">
+    <div id="import-container">
+        <!-- Step 1: File Upload -->
+        <h3>Step 1: Select Vehicle and CSV File</h3>
+        <form hx-post="/htmx/import/preview" hx-encoding="multipart/form-data" hx-target="#import-container">
+            <label>
+                Vehicle
+                <select name="vehicle_id" required>
+                    <option value="">Select a vehicle...</option>
+                    {% for vehicle in vehicles %}
+                    <option value="{{ vehicle.id }}">{{ vehicle.registration }} ({{ vehicle.make }} {{ vehicle.model }})</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label>
+                CSV File
+                <input type="file" name="file" accept=".csv" required>
+            </label>
+
+            <button type="submit">Next: Map Fields</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
