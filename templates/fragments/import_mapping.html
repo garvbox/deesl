@@ -1,0 +1,57 @@
+<div id="import-container">
+    <h3>Step 2: Map CSV Columns</h3>
+    <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1rem;">
+        Match each CSV column to the corresponding fuel entry field. Required: Date, Litres, Cost, Mileage.
+    </p>
+
+    <!-- We need to preserve the vehicle_id and file data, but since we can't easily send the file again in a hidden field, 
+         we might need to store it temporarily on the server or use a different strategy. 
+         For HTMX simplicity, we can use hx-include to include the original file input, 
+         but it's better to use a two-step process where the file is uploaded once.
+    -->
+
+    <form hx-post="/htmx/import/execute" hx-encoding="multipart/form-data" hx-target="#import-container">
+        <!-- Hidden inputs to carry forward state -->
+        <input type="hidden" name="vehicle_id" value="{{ vehicle_id }}">
+        <!-- In a real world app, we'd save the file to a temp location and pass a token here. 
+             For this demo/migration, we'll ask the user to keep the file input or we'll handle the re-upload.
+        -->
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 1.5rem;">
+            <thead>
+                <tr style="text-align: left; background: var(--bg); border-bottom: 1px solid var(--border);">
+                    <th style="padding: 0.5rem;">CSV Column</th>
+                    <th style="padding: 0.5rem;">Maps To</th>
+                    <th style="padding: 0.5rem;">Sample</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for column in columns %}
+                <tr style="border-bottom: 1px solid var(--border);">
+                    <td style="padding: 0.5rem;">{{ column }}</td>
+                    <td style="padding: 0.5rem;">
+                        <select name="map_{{ loop.index0 }}">
+                            <option value="">-- Skip --</option>
+                            <option value="filled_at_date" {% if self.is_mapped(column, "filled_at_date") %}selected{% endif %}>Date</option>
+                            <option value="filled_at_time" {% if self.is_mapped(column, "filled_at_time") %}selected{% endif %}>Time</option>
+                            <option value="station" {% if self.is_mapped(column, "station") %}selected{% endif %}>Station/Location</option>
+                            <option value="litres" {% if self.is_mapped(column, "litres") %}selected{% endif %}>Litres</option>
+                            <option value="cost" {% if self.is_mapped(column, "cost") %}selected{% endif %}>Cost</option>
+                            <option value="mileage_km" {% if self.is_mapped(column, "mileage_km") %}selected{% endif %}>Mileage (KM)</option>
+                        </select>
+                        <input type="hidden" name="col_{{ loop.index0 }}" value="{{ column }}">
+                    </td>
+                    <td style="padding: 0.5rem; color: var(--text-muted); font-size: 0.8rem;">
+                        {{ sample_data[loop.index0] }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div style="display: flex; gap: 1rem;">
+            <button type="submit">Import Entries</button>
+            <button type="button" class="btn btn-outline" onclick="window.location.reload()">Restart</button>
+        </div>
+    </form>
+</div>
