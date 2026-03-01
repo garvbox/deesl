@@ -131,8 +131,9 @@ async fn test_import_preview_accepts_csv() {
 async fn test_htmx_recent_entries_returns_fragment() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "recent_test").await;
-    let vehicle_id = common::create_test_vehicle_db(&env.pool, user.id, "Audi", "A4", "AUDI-44").await;
-    
+    let vehicle_id =
+        common::create_test_vehicle_db(&env.pool, user.id, "Audi", "A4", "AUDI-44").await;
+
     // Create a fuel entry in DB
     let conn = env.pool.get().await.unwrap();
     conn.interact(move |conn| {
@@ -145,7 +146,10 @@ async fn test_htmx_recent_entries_returns_fragment() {
                 deesl::schema::fuel_entries::filled_at.eq(chrono::Utc::now().naive_utc()),
             ))
             .execute(conn)
-    }).await.unwrap().unwrap();
+    })
+    .await
+    .unwrap()
+    .unwrap();
 
     let response = env
         .server
@@ -163,7 +167,8 @@ async fn test_htmx_recent_entries_returns_fragment() {
 async fn test_create_fuel_entry_and_redirects() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "fuel_test").await;
-    let vehicle_id = common::create_test_vehicle_db(&env.pool, user.id, "Ford", "Focus", "FORD-F").await;
+    let vehicle_id =
+        common::create_test_vehicle_db(&env.pool, user.id, "Ford", "Focus", "FORD-F").await;
 
     let form = [
         ("vehicle_id", vehicle_id.to_string()),
@@ -188,7 +193,8 @@ async fn test_create_fuel_entry_and_redirects() {
 async fn test_htmx_delete_vehicle() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "delete_test").await;
-    let vehicle_id = common::create_test_vehicle_db(&env.pool, user.id, "Old", "Car", "OLD-1").await;
+    let vehicle_id =
+        common::create_test_vehicle_db(&env.pool, user.id, "Old", "Car", "OLD-1").await;
 
     let response = env
         .server
@@ -201,13 +207,17 @@ async fn test_htmx_delete_vehicle() {
 
     // Verify it's gone from DB
     let conn = env.pool.get().await.unwrap();
-    let exists: bool = conn.interact(move |conn| {
-        deesl::schema::vehicles::table
-            .filter(deesl::schema::vehicles::id.eq(vehicle_id))
-            .first::<deesl::models::Vehicle>(conn)
-            .optional()
-            .map(|v| v.is_some())
-    }).await.unwrap().unwrap();
+    let exists: bool = conn
+        .interact(move |conn| {
+            deesl::schema::vehicles::table
+                .filter(deesl::schema::vehicles::id.eq(vehicle_id))
+                .first::<deesl::models::Vehicle>(conn)
+                .optional()
+                .map(|v| v.is_some())
+        })
+        .await
+        .unwrap()
+        .unwrap();
     assert!(!exists);
 }
 
@@ -215,7 +225,8 @@ async fn test_htmx_delete_vehicle() {
 async fn test_htmx_import_execute() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "import_exec").await;
-    let vehicle_id = common::create_test_vehicle_db(&env.pool, user.id, "Import", "Car", "IMP-2").await;
+    let vehicle_id =
+        common::create_test_vehicle_db(&env.pool, user.id, "Import", "Car", "IMP-2").await;
 
     let csv_content = b"Date,Litres,Cost,Mileage\n2024-03-01,40.5,60.0,10000";
     let mut mappings = std::collections::HashMap::new();
