@@ -532,8 +532,8 @@ pub async fn htmx_import_preview(
 }
 
 pub async fn htmx_import_execute(
-    State(_pool): State<Pool>,
-    _user: AuthUser,
+    State(pool): State<Pool>,
+    user: AuthUser,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let mut csv_data: Option<Vec<u8>> = None;
@@ -564,16 +564,56 @@ pub async fn htmx_import_execute(
         }
     }
 
-    let _vehicle_id =
+    let vehicle_id =
         vehicle_id.ok_or((StatusCode::BAD_REQUEST, "vehicle_id required".to_string()))?;
-    let _csv_data = csv_data.ok_or((StatusCode::BAD_REQUEST, "No file uploaded".to_string()))?;
+    let csv_data = csv_data.ok_or((StatusCode::BAD_REQUEST, "No file uploaded".to_string()))?;
+
+    // Reconstruct the actual mappings HashMap<String, String> (Target Field -> CSV Col)
+    // Note: perform_import expects mappings to be Target Field -> CSV Col Name
+    let mut actual_mappings: HashMap<String, String> = HashMap::new();
+    let mut i = 0;
+    while let Some(col_name) = mappings_raw.get(&format!("col_{}", i)) {
+        if let Some(target_field) = mappings_raw.get(&format!("map_{}", i)) {
+            if !target_field.is_empty() {
+                actual_mappings.insert(target_field.clone(), col_name.clone());
+            }
+        }
+        i += 1;
+    }
+
+    let result =
+        crate::import_handlers::perform_import(&pool, user.user_id, vehicle_id, csv_data, actual_mappings)
+            .await?;
+
+    if result.total_errors > 0 && result.imported == 0 {
+        let mut error_list = String::from("<ul>");
+        for err in result.errors {
+            error_list.push_str(&format!("<li>{}</li>", err));
+        }
+        error_list.push_str("</ul>");
+
+        return Ok(Html(format!(
+            r#"<div class="card" style="background: #f8d7da; border-color: #f5c6cb; color: #721c24;">
+                <h3>Import Failed</h3>
+                <p>Found {} errors. First 10:</p>
+                {}
+                <button class="btn btn-outline" onclick="window.location.reload()">Try Again</button>
+            </div>"#,
+            result.total_errors, error_list
+        )));
+    }
 
     Ok(Html(format!(
         r#"<div class="card" style="background: #d4edda; border-color: #c3e6cb; color: #155724;">
             <h3>Import Successful</h3>
-            <p>Your data has been imported successfully.</p>
+            <div style="display: flex; gap: 2rem; margin: 1.5rem 0;">
+                <div><strong>{}</strong><br><span style="font-size: 0.8rem;">Imported</span></div>
+                <div><strong>{}</strong><br><span style="font-size: 0.8rem;">Skipped</span></div>
+                <div><strong>{}</strong><br><span style="font-size: 0.8rem;">Stations Created</span></div>
+            </div>
             <a href="/dashboard" class="btn">Return to Dashboard</a>
-        </div>"#
+        </div>"#,
+        result.imported, result.skipped, result.stations_created
     )))
 }
 

@@ -13,9 +13,12 @@
     <form hx-post="/htmx/import/execute" hx-encoding="multipart/form-data" hx-target="#import-container">
         <!-- Hidden inputs to carry forward state -->
         <input type="hidden" name="vehicle_id" value="{{ vehicle_id }}">
-        <!-- In a real world app, we'd save the file to a temp location and pass a token here. 
-             For this demo/migration, we'll ask the user to keep the file input or we'll handle the re-upload.
-        -->
+        
+        <div style="background: var(--bg); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid var(--border);">
+            <p style="margin-top: 0; font-size: 0.8rem; font-weight: 600;">Confirm File Selection</p>
+            <input type="file" name="file" accept=".csv" required style="font-size: 0.8rem;">
+            <p style="margin-bottom: 0; font-size: 0.75rem; color: var(--text-muted);">Please select the same file again to confirm the import.</p>
+        </div>
 
         <table style="width: 100%; border-collapse: collapse; margin-bottom: 1.5rem;">
             <thead>
