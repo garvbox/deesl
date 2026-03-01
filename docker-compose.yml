@@ -16,20 +16,5 @@ services:
       timeout: 15s
       retries: 5
 
-  app:
-    build: .
-    container_name: app
-    environment:
-      DATABASE_URL: postgres://postgres:postgres@db:5432/deesl
-      HOST: 0.0.0.0
-      PORT: 8000
-      ENVIRONMENT: production
-      CORS_ORIGINS: ""
-    ports:
-      - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-
 volumes:
   pgdata:
