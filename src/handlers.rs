@@ -1078,4 +1078,24 @@ mod tests {
         let (status, _) = internal_error(TestError("boom".to_string()));
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
     }
+
+    #[test]
+    fn test_validate_currency_accepts_all_supported_currencies() {
+        for currency in SUPPORTED_CURRENCIES {
+            assert!(
+                validate_currency(currency).is_ok(),
+                "{currency} should be accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_currency_rejects_unknown_currency() {
+        let result = validate_currency("XYZ");
+        assert!(result.is_err());
+        let (status, msg) = result.unwrap_err();
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(msg.contains("XYZ"));
+        assert!(msg.contains("Must be one of"));
+    }
 }
