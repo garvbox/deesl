@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tower_http::cors::{AllowOrigin, CorsLayer};
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 use tower_livereload::LiveReloadLayer;
 use tracing::info;
@@ -30,19 +30,6 @@ async fn serve_openapi() -> axum::response::Json<String> {
 async fn serve_version() -> axum::response::Json<serde_json::Value> {
     const VERSION: &str = env!("CARGO_PKG_VERSION");
     axum::response::Json(serde_json::json!({ "version": VERSION }))
-}
-
-async fn serve_index() -> impl IntoResponse {
-    match tokio::fs::read_to_string("src/pkg/index.html").await {
-        Ok(content) => axum::response::Html(content),
-        Err(err) => {
-            tracing::error!("Failed to read index.html: {}", err);
-            axum::response::Html(
-                "<h1>Server Error</h1><p>Failed to load application. Please try again later.</p>"
-                    .to_string(),
-            )
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -118,8 +105,7 @@ async fn main() {
         .merge(vehicle_fuel_handlers::router())
         .merge(vehicle_share_handlers::router())
         .merge(import_handlers::router())
-        .nest_service("/assets", ServeDir::new("src/pkg/assets"))
-        .fallback(serve_index)
+        .fallback_service(ServeDir::new("src/pkg").fallback(ServeFile::new("src/pkg/index.html")))
         .layer(middleware::from_fn(add_cache_control_headers))
         .layer(TraceLayer::new_for_http())
         .with_state(app_state);
