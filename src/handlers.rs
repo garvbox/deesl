@@ -7,13 +7,13 @@ use axum::{
 };
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use chrono::Datelike;
 
 use crate::auth::{AuthUser, AuthUserRedirect};
-use crate::models::{NewVehicle, User, Vehicle};
-use crate::schema::{users, vehicles};
-use crate::user_handlers::SUPPORTED_CURRENCIES;
-use std::collections::HashMap;
+use crate::models::{NewVehicle, User, Vehicle, FuelStation, NewFuelStation};
+use crate::schema::{users, vehicles, fuel_stations};
 
 /// Utility function for mapping any error into a `500 Internal Server Error`
 pub fn internal_error<E>(err: E) -> (StatusCode, String)
@@ -21,6 +21,453 @@ where
     E: std::fmt::Display,
 {
     (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+}
+
+pub const SUPPORTED_CURRENCIES: &[&str] = &["EUR", "GBP", "USD", "CAD", "AUD"];
+
+pub fn validate_currency(currency: &str) -> Result<(), (StatusCode, String)> {
+    if SUPPORTED_CURRENCIES.contains(&currency) {
+        Ok(())
+    } else {
+        Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+                "Unsupported currency '{}'. Must be one of: {}",
+                currency,
+                SUPPORTED_CURRENCIES.join(", ")
+            ),
+        ))
+    }
+}
+
+#[derive(Serialize, Clone)]
+pub struct ImportResult {
+    pub imported: usize,
+    pub skipped: usize,
+    pub stations_created: usize,
+    pub total_errors: usize,
+    pub errors: Vec<String>,
+}
+
+#[derive(Clone)]
+struct ParsedRow {
+    #[allow(dead_code)]
+    row_num: usize,
+    filled_at: chrono::NaiveDateTime,
+    station_name: Option<String>,
+    litres: f64,
+    cost: f64,
+    mileage_km: i32,
+}
+
+#[derive(Clone)]
+struct StationOp {
+    normalized_name: String,
+    original_name: String,
+}
+
+pub async fn check_vehicle_write_access(
+    pool: &Pool,
+    user_id: i32,
+    vehicle_id: i32,
+) -> Result<(), (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let has_write_access: (bool, bool) = conn
+        .interact(move |conn| {
+            let vehicle: Vehicle = vehicles::table
+                .filter(vehicles::id.eq(vehicle_id))
+                .first(conn)
+                .optional()?
+                .ok_or(diesel::result::Error::NotFound)?;
+
+            if vehicle.owner_id == user_id {
+                return Ok::<(bool, bool), diesel::result::Error>((true, true));
+            }
+
+            let share = crate::schema::vehicle_shares::table
+                .filter(crate::schema::vehicle_shares::vehicle_id.eq(vehicle_id))
+                .filter(crate::schema::vehicle_shares::shared_with_user_id.eq(user_id))
+                .first::<crate::models::VehicleShare>(conn)
+                .optional()?;
+
+            match share {
+                Some(s) => Ok((true, s.permission_level == "write")),
+                None => Ok((false, false)),
+            }
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|_| (StatusCode::NOT_FOUND, "Vehicle not found".to_string()))?;
+
+    let (has_access, has_write) = has_write_access;
+
+    if !has_access {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "You don't have access to this vehicle".to_string(),
+        ));
+    }
+
+    if !has_write {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "You don't have write permission for this vehicle".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+pub async fn perform_import(
+    pool: &Pool,
+    user_id: i32,
+    vehicle_id: i32,
+    csv_data: Vec<u8>,
+    mappings: HashMap<String, String>,
+) -> Result<ImportResult, (StatusCode, String)> {
+    check_vehicle_write_access(pool, user_id, vehicle_id).await?;
+
+    let mut reader = csv::Reader::from_reader(&csv_data[..]);
+    let headers: Vec<String> = reader
+        .headers()
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("CSV parse error: {}", e)))?
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+
+    let date_col = mappings.get("filled_at_date").cloned();
+    let time_col = mappings.get("filled_at_time").cloned();
+    let station_col = mappings.get("station").cloned();
+    let litres_col = mappings.get("litres").cloned();
+    let cost_col = mappings.get("cost").cloned();
+    let km_col = mappings.get("mileage_km").cloned();
+
+    let mut parsed_rows: Vec<ParsedRow> = Vec::new();
+    let mut parse_errors: Vec<String> = Vec::new();
+
+    for (row_num, result) in reader.records().enumerate() {
+        let row_num = row_num + 2;
+        let record = match result {
+            Ok(r) => r,
+            Err(e) => {
+                parse_errors.push(format!("Row {}: CSV parse error - {}", row_num, e));
+                continue;
+            }
+        };
+
+        let row_data: HashMap<String, String> = headers
+            .iter()
+            .zip(record.iter())
+            .map(|(h, v)| (h.clone(), v.to_string()))
+            .collect();
+
+        if row_data.values().all(|v| v.trim().is_empty()) {
+            continue;
+        }
+
+        let date_str = date_col.as_ref().and_then(|col| row_data.get(col).cloned());
+        let time_str = time_col.as_ref().and_then(|col| row_data.get(col).cloned());
+        let station_name = station_col
+            .as_ref()
+            .and_then(|col| row_data.get(col).cloned());
+        let litres_str = litres_col
+            .as_ref()
+            .and_then(|col| row_data.get(col).cloned());
+        let cost_str = cost_col.as_ref().and_then(|col| row_data.get(col).cloned());
+        let km_str = km_col.as_ref().and_then(|col| row_data.get(col).cloned());
+
+        if date_str.is_none() || litres_str.is_none() || cost_str.is_none() || km_str.is_none() {
+            parse_errors.push(format!(
+                "Row {}: Missing required fields (date, litres, cost, or mileage)",
+                row_num
+            ));
+            continue;
+        }
+
+        let filled_at = match parse_datetime(date_str.as_deref().unwrap(), time_str.as_deref()) {
+            Some(dt) => dt,
+            None => {
+                parse_errors.push(format!(
+                    "Row {}: Invalid date/time format: {:?} {:?}",
+                    row_num,
+                    date_str.as_deref().unwrap_or("none"),
+                    time_str.as_deref().unwrap_or("none")
+                ));
+                continue;
+            }
+        };
+
+        let litres = match parse_float(litres_str.as_deref().unwrap()) {
+            Some(v) => v,
+            None => {
+                parse_errors.push(format!(
+                    "Row {}: Invalid litres value: {}",
+                    row_num,
+                    litres_str.as_deref().unwrap_or("")
+                ));
+                continue;
+            }
+        };
+
+        let cost = match parse_float(cost_str.as_deref().unwrap()) {
+            Some(v) => v,
+            None => {
+                parse_errors.push(format!(
+                    "Row {}: Invalid cost value: {}",
+                    row_num,
+                    cost_str.as_deref().unwrap_or("")
+                ));
+                continue;
+            }
+        };
+
+        let mileage_km = match parse_int(km_str.as_deref().unwrap()) {
+            Some(v) => v,
+            None => {
+                parse_errors.push(format!(
+                    "Row {}: Invalid mileage value: {}",
+                    row_num,
+                    km_str.as_deref().unwrap_or("")
+                ));
+                continue;
+            }
+        };
+
+        parsed_rows.push(ParsedRow {
+            row_num,
+            filled_at,
+            station_name: station_name.filter(|s| !s.trim().is_empty()),
+            litres,
+            cost,
+            mileage_km,
+        });
+    }
+
+    if !parse_errors.is_empty() {
+        return Ok(ImportResult {
+            imported: 0,
+            skipped: 0,
+            stations_created: 0,
+            total_errors: parse_errors.len(),
+            errors: parse_errors.into_iter().take(10).collect(),
+        });
+    }
+
+    let existing_stations: HashMap<String, i32> = pool
+        .get()
+        .await
+        .map_err(internal_error)?
+        .interact(move |conn| {
+            fuel_stations::table
+                .filter(
+                    fuel_stations::user_id
+                        .eq(user_id)
+                        .or(fuel_stations::user_id.is_null()),
+                )
+                .load::<FuelStation>(conn)
+                .map(|stations| {
+                    stations
+                        .into_iter()
+                        .map(|s| (normalize_station_name(&s.name), s.id))
+                        .collect::<HashMap<_, _>>()
+                })
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("DB error: {}", e),
+            )
+        })?;
+
+    let mut stations_to_create: Vec<StationOp> = Vec::new();
+    let stations_map = existing_stations;
+    let mut seen_stations: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for row in &parsed_rows {
+        if let Some(name) = &row.station_name {
+            let normalized = normalize_station_name(name);
+            if !stations_map.contains_key(&normalized) && !seen_stations.contains(&normalized) {
+                seen_stations.insert(normalized.clone());
+                stations_to_create.push(StationOp {
+                    normalized_name: normalized,
+                    original_name: name.trim().to_string(),
+                });
+            }
+        }
+    }
+
+    let conn = pool.get().await.map_err(internal_error)?;
+    let result: (usize, usize, usize, Vec<String>) = conn
+        .interact(move |conn| {
+            conn.transaction::<_, diesel::result::Error, _>(move |conn| {
+                use diesel::result::Error as DieselError;
+
+                let mut stations_created: usize = 0;
+                let mut new_stations_cache: HashMap<String, i32> = HashMap::new();
+
+                for station_op in stations_to_create {
+                    let new_station_name = station_op.original_name.clone();
+                    match diesel::insert_into(fuel_stations::table)
+                        .values(NewFuelStation {
+                            name: new_station_name,
+                            user_id: Some(user_id),
+                        })
+                        .returning(fuel_stations::id)
+                        .get_result::<i32>(conn)
+                    {
+                        Ok(id) => {
+                            new_stations_cache.insert(station_op.normalized_name.clone(), id);
+                            stations_created += 1;
+                        }
+                        Err(DieselError::DatabaseError(
+                            diesel::result::DatabaseErrorKind::UniqueViolation,
+                            _,
+                        )) => {
+                            if let Ok(id) = fuel_stations::table
+                                .filter(fuel_stations::name.eq(station_op.original_name.trim()))
+                                .filter(
+                                    fuel_stations::user_id
+                                        .eq(user_id)
+                                        .or(fuel_stations::user_id.is_null()),
+                                )
+                                .select(fuel_stations::id)
+                                .first::<i32>(conn)
+                            {
+                                new_stations_cache.insert(station_op.normalized_name.clone(), id);
+                            }
+                        }
+                        Err(e) => return Err(e),
+                    }
+                }
+
+                let mut all_stations = stations_map;
+                all_stations.extend(new_stations_cache);
+
+                let mut imported: usize = 0;
+                let mut skipped: usize = 0;
+                let mut row_errors: Vec<String> = Vec::new();
+
+                for row in parsed_rows {
+                    let station_id = row
+                        .station_name
+                        .as_ref()
+                        .and_then(|name| all_stations.get(&normalize_station_name(name)).copied());
+
+                    let exists: bool = diesel::dsl::select(diesel::dsl::exists(
+                        crate::schema::fuel_entries::table
+                            .filter(crate::schema::fuel_entries::vehicle_id.eq(vehicle_id))
+                            .filter(crate::schema::fuel_entries::mileage_km.eq(row.mileage_km))
+                            .filter(crate::schema::fuel_entries::filled_at.eq(row.filled_at)),
+                    ))
+                    .get_result(conn)
+                    .unwrap_or(false);
+
+                    if exists {
+                        skipped += 1;
+                        continue;
+                    }
+
+                    match diesel::insert_into(crate::schema::fuel_entries::table)
+                        .values((
+                            crate::schema::fuel_entries::vehicle_id.eq(vehicle_id),
+                            crate::schema::fuel_entries::station_id.eq(station_id),
+                            crate::schema::fuel_entries::mileage_km.eq(row.mileage_km),
+                            crate::schema::fuel_entries::litres.eq(row.litres),
+                            crate::schema::fuel_entries::cost.eq(row.cost),
+                            crate::schema::fuel_entries::filled_at.eq(row.filled_at),
+                        ))
+                        .execute(conn)
+                    {
+                        Ok(_) => imported += 1,
+                        Err(e) => {
+                            row_errors.push(format!("Row {}: Database error - {}", row.row_num, e));
+                        }
+                    }
+                }
+
+                Ok((imported, skipped, stations_created, row_errors))
+            })
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Transaction failed: {}", e),
+            )
+        })?;
+
+    let (imported, skipped, stations_created, mut row_errors) = result;
+    let mut all_errors = parse_errors;
+    all_errors.append(&mut row_errors);
+    let total_errors = all_errors.len();
+
+    Ok(ImportResult {
+        imported,
+        skipped,
+        stations_created,
+        total_errors,
+        errors: all_errors.into_iter().take(10).collect(),
+    })
+}
+
+fn normalize_station_name(name: &str) -> String {
+    name.to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn parse_datetime(date_str: &str, time_str: Option<&str>) -> Option<chrono::NaiveDateTime> {
+    let date = parse_date(date_str)?;
+    let time = time_str
+        .and_then(parse_time)
+        .unwrap_or_else(|| chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+    Some(chrono::NaiveDateTime::new(date, time))
+}
+
+fn parse_date(date_str: &str) -> Option<chrono::NaiveDate> {
+    let trimmed = date_str.trim();
+
+    if let Ok(dt) = chrono::NaiveDate::parse_from_str(trimmed, "%d/%m/%Y") {
+        return Some(dt);
+    }
+
+    if let Ok(dt) = chrono::NaiveDate::parse_from_str(trimmed, "%d/%m/%y") {
+        let year = dt.year();
+        let full_year = if year < 50 { 2000 + year } else { 1900 + year };
+        return chrono::NaiveDate::from_ymd_opt(full_year, dt.month(), dt.day());
+    }
+
+    if let Ok(dt) = chrono::NaiveDate::parse_from_str(trimmed, "%Y-%m-%d") {
+        return Some(dt);
+    }
+
+    None
+}
+
+fn parse_time(time_str: &str) -> Option<chrono::NaiveTime> {
+    let trimmed = time_str.trim();
+
+    if let Ok(t) = chrono::NaiveTime::parse_from_str(trimmed, "%H:%M:%S") {
+        return Some(t);
+    }
+
+    if let Ok(t) = chrono::NaiveTime::parse_from_str(trimmed, "%H:%M") {
+        return Some(t);
+    }
+
+    None
+}
+
+fn parse_float(s: &str) -> Option<f64> {
+    s.trim().replace(",", "").parse().ok()
+}
+
+fn parse_int(s: &str) -> Option<i32> {
+    s.trim().replace(",", "").replace(" ", "").parse().ok()
 }
 
 #[derive(Template)]
@@ -100,7 +547,7 @@ pub async fn update_settings(
     user: AuthUser,
     Form(payload): Form<UpdateSettingsForm>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    crate::user_handlers::validate_currency(&payload.currency)?;
+    validate_currency(&payload.currency)?;
 
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
@@ -228,7 +675,6 @@ pub async fn create_fuel_entry(
     let user_id = user.user_id;
     let vehicle_id = payload.vehicle_id;
 
-    // Verify ownership
     let is_owner: bool = conn
         .interact(move |conn| {
             vehicles::table
@@ -479,7 +925,7 @@ pub async fn htmx_import_preview(
         vehicle_id.ok_or((StatusCode::BAD_REQUEST, "vehicle_id required".to_string()))?;
     let csv_data = csv_data.ok_or((StatusCode::BAD_REQUEST, "No file uploaded".to_string()))?;
 
-    crate::import_handlers::check_vehicle_write_access(&pool, user.user_id, vehicle_id).await?;
+    check_vehicle_write_access(&pool, user.user_id, vehicle_id).await?;
 
     let mut reader = csv::Reader::from_reader(&csv_data[..]);
     let headers: Vec<String> = reader
@@ -566,8 +1012,6 @@ pub async fn htmx_import_execute(
         vehicle_id.ok_or((StatusCode::BAD_REQUEST, "vehicle_id required".to_string()))?;
     let csv_data = csv_data.ok_or((StatusCode::BAD_REQUEST, "No file uploaded".to_string()))?;
 
-    // Reconstruct the actual mappings HashMap<String, String> (Target Field -> CSV Col)
-    // Note: perform_import expects mappings to be Target Field -> CSV Col Name
     let mut actual_mappings: HashMap<String, String> = HashMap::new();
     let mut i = 0;
     while let Some(col_name) = mappings_raw.get(&format!("col_{}", i)) {
@@ -579,9 +1023,7 @@ pub async fn htmx_import_execute(
         i += 1;
     }
 
-    let result =
-        crate::import_handlers::perform_import(&pool, user.user_id, vehicle_id, csv_data, actual_mappings)
-            .await?;
+    let result = perform_import(&pool, user.user_id, vehicle_id, csv_data, actual_mappings).await?;
 
     if result.total_errors > 0 && result.imported == 0 {
         let mut error_list = String::from("<ul>");
