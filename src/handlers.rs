@@ -996,10 +996,11 @@ pub async fn htmx_import_execute(
     let mut actual_mappings: HashMap<String, String> = HashMap::new();
     let mut i = 0;
     while let Some(col_name) = mappings_raw.get(&format!("col_{}", i)) {
-        if let Some(target_field) = mappings_raw.get(&format!("map_{}", i)) {
-            if !target_field.is_empty() {
-                actual_mappings.insert(target_field.clone(), col_name.clone());
-            }
+        if let Some(target_field) = mappings_raw
+            .get(&format!("map_{}", i))
+            .filter(|s| !s.is_empty())
+        {
+            actual_mappings.insert(target_field.clone(), col_name.clone());
         }
         i += 1;
     }

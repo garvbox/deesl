@@ -3,14 +3,13 @@ use deadpool_diesel::postgres::{Manager, Pool};
 use diesel::prelude::*;
 
 use deesl::auth::AuthConfig;
-use deesl::models::{NewFuelEntry, NewFuelStation, NewUser, NewVehicle};
-use deesl::schema::{fuel_entries, fuel_stations, users, vehicles};
+use deesl::models::{NewUser, NewVehicle};
+use deesl::schema::{users, vehicles};
 
 /// Test user data for creating test fixtures
 #[derive(Clone)]
 pub struct TestUser {
     pub id: i32,
-    pub email: String,
     pub token: String,
 }
 
@@ -131,11 +130,7 @@ pub async fn create_test_user_db(pool: &Pool, email: &str) -> TestUser {
 
     let token = create_test_token(user.id, &user.email);
 
-    TestUser {
-        id: user.id,
-        email: user.email,
-        token,
-    }
+    TestUser { id: user.id, token }
 }
 
 /// Creates a test vehicle in the database
@@ -167,75 +162,6 @@ pub async fn create_test_vehicle_db(
         .unwrap();
 
     vehicle.id
-}
-
-/// Creates a fuel station in the database
-pub async fn create_test_station_db(pool: &Pool, user_id: i32, name: &str) -> i32 {
-    let conn = pool.get().await.unwrap();
-    let name = name.to_string();
-
-    let station: deesl::models::FuelStation = conn
-        .interact(move |conn| {
-            diesel::insert_into(fuel_stations::table)
-                .values(NewFuelStation {
-                    name,
-                    user_id: Some(user_id),
-                })
-                .get_result(conn)
-        })
-        .await
-        .unwrap()
-        .unwrap();
-
-    station.id
-}
-
-/// Creates a fuel entry in the database
-pub async fn create_test_fuel_entry_db(
-    pool: &Pool,
-    vehicle_id: i32,
-    station_id: Option<i32>,
-    mileage_km: i32,
-    litres: f64,
-    cost: f64,
-) -> i32 {
-    let conn = pool.get().await.unwrap();
-
-    let entry: deesl::models::FuelEntry = conn
-        .interact(move |conn| {
-            diesel::insert_into(fuel_entries::table)
-                .values(NewFuelEntry {
-                    vehicle_id,
-                    station_id,
-                    mileage_km,
-                    litres,
-                    cost,
-                    filled_at: Some(chrono::Utc::now().naive_utc()),
-                })
-                .get_result(conn)
-        })
-        .await
-        .unwrap()
-        .unwrap();
-
-    entry.id
-}
-
-/// Cleans up test data (useful for cleanup between tests)
-#[allow(dead_code)]
-pub async fn cleanup_test_data(pool: &Pool) {
-    let conn = pool.get().await.unwrap();
-
-    let _ = conn
-        .interact(|conn| {
-            diesel::delete(fuel_entries::table).execute(conn)?;
-            diesel::delete(deesl::schema::vehicle_shares::table).execute(conn)?;
-            diesel::delete(fuel_stations::table).execute(conn)?;
-            diesel::delete(vehicles::table).execute(conn)?;
-            diesel::delete(users::table).execute(conn)?;
-            Ok::<_, diesel::result::Error>(())
-        })
-        .await;
 }
 
 pub async fn post_import_csv(

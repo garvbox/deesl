@@ -1,5 +1,5 @@
 {% if vehicles.is_empty() %}
-    <p style="color: var(--text-muted);">No vehicles found. Add one to get started!</p>
+    <p id="no-vehicles" style="color: var(--text-muted);">No vehicles found. Add one to get started!</p>
 {% else %}
     <div style="display: grid; gap: 1rem;">
         {% for v in vehicles %}

@@ -81,33 +81,32 @@ async fn main() {
     .expect("Failed to interact with database");
 
     // Ensure dev user exists if dev auth is enabled
-    if config.is_development() {
-        if let Ok(dev_email) = env::var(DEV_AUTH_EMAIL_KEY) {
-            let pool_clone = pool.clone();
-            let _ = tokio::spawn(async move {
-                if let Ok(conn) = pool_clone.get().await {
-                    let _ = conn
-                        .interact(move |conn| {
-                            let exists = users::table
-                                .filter(users::email.eq(&dev_email))
-                                .first::<deesl::models::User>(conn)
-                                .is_ok();
+    if config.is_development() && env::var(DEV_AUTH_EMAIL_KEY).is_ok() {
+        let dev_email = env::var(DEV_AUTH_EMAIL_KEY).unwrap();
+        let pool_clone = pool.clone();
+        tokio::spawn(async move {
+            if let Ok(conn) = pool_clone.get().await {
+                let _ = conn
+                    .interact(move |conn| {
+                        let exists = users::table
+                            .filter(users::email.eq(&dev_email))
+                            .first::<deesl::models::User>(conn)
+                            .is_ok();
 
-                            if !exists {
-                                let _ = diesel::insert_into(users::table)
-                                    .values(NewUser {
-                                        email: dev_email,
-                                        password_hash: None,
-                                        google_id: None,
-                                        currency: "EUR".to_string(),
-                                    })
-                                    .execute(conn);
-                            }
-                        })
-                        .await;
-                }
-            });
-        }
+                        if !exists {
+                            let _ = diesel::insert_into(users::table)
+                                .values(NewUser {
+                                    email: dev_email,
+                                    password_hash: None,
+                                    google_id: None,
+                                    currency: "EUR".to_string(),
+                                })
+                                .execute(conn);
+                        }
+                    })
+                    .await;
+            }
+        });
     }
 
     let app_state = AppState {
