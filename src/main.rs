@@ -174,6 +174,7 @@ async fn main() {
     let mut app = Router::new()
         .route("/", get(|| async { axum::response::Redirect::to("/dashboard") }))
         .route("/login", get(handlers::login))
+        .route("/logout", get(oauth_handlers::logout))
         .route("/dashboard", get(handlers::dashboard))
         .route("/settings", get(handlers::settings_page).patch(handlers::update_settings))
         .route("/vehicles", get(handlers::vehicles_page).post(handlers::create_vehicle))
