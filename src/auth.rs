@@ -1,10 +1,11 @@
 use axum::http::{HeaderMap, StatusCode};
-use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 
 use crate::oauth_handlers::extract_cookie;
 
 pub const JWT_SECRET_KEY: &str = "JWT_SECRET";
+pub const DEV_AUTH_EMAIL_KEY: &str = "DEV_AUTH_EMAIL";
 pub const JWT_EXPIRATION_HOURS: i64 = 24 * 7;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -77,7 +78,50 @@ pub struct AuthUser {
     pub email: String,
 }
 
+pub fn is_dev_auth_bypass_allowed(headers: &HeaderMap) -> Option<String> {
+    // Layer 1: Compile-time check - only in debug builds
+    // This prevents the bypass from working in release builds (production)
+    if cfg!(not(debug_assertions)) {
+        return None;
+    }
+
+    // Layer 2: DEV_AUTH_EMAIL must be set (this is the bypass trigger)
+    let email = std::env::var(DEV_AUTH_EMAIL_KEY).ok()?;
+
+    // Layer 3: Only allow from localhost (127.0.0.1, ::1, localhost)
+    let is_localhost = headers
+        .get("host")
+        .and_then(|h| h.to_str().ok())
+        .map(|host| {
+            host.starts_with("localhost:")
+                || host.starts_with("127.0.0.1:")
+                || host == "localhost"
+                || host == "127.0.0.1"
+                || host.starts_with("[::1]:")
+                || host == "[::1]"
+        })
+        .unwrap_or(false);
+
+    // Also check X-Forwarded-For if behind a proxy
+    let is_localhost_forwarded = headers
+        .get("x-forwarded-for")
+        .and_then(|h| h.to_str().ok())
+        .map(|ip| ip == "127.0.0.1" || ip == "::1" || ip == "localhost")
+        .unwrap_or(true);
+
+    if is_localhost && is_localhost_forwarded {
+        Some(email)
+    } else {
+        None
+    }
+}
+
 pub fn extract_auth_user(headers: &HeaderMap) -> Result<AuthUser, (StatusCode, String)> {
+    // Dev bypass for local testing - simplified: just set DEV_AUTH_EMAIL
+    if let Some(email) = is_dev_auth_bypass_allowed(headers) {
+        return Ok(AuthUser { user_id: 1, email });
+    }
+
     let token = extract_cookie(headers, "auth_token")
         .ok_or((StatusCode::UNAUTHORIZED, "Missing auth token".to_string()))?;
 

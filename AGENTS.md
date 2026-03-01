@@ -89,6 +89,31 @@ diesel migration redo
 diesel print-schema > src/schema.rs
 ```
 
+### Development with Auth Bypass
+
+For local testing without Google SSO, set the `DEV_AUTH_EMAIL` environment variable:
+
+```bash
+# Run backend with auth bypass enabled
+DEV_AUTH_EMAIL=dev@localhost cargo run
+
+# Or with the just command
+DEV_AUTH_EMAIL=dev@localhost just develop
+```
+
+When `DEV_AUTH_EMAIL` is set, all requests from localhost are treated as authenticated as user_id=1 with the specified email.
+
+**Production Safety:** The auth bypass has multiple layers of protection:
+1. **Compile-time:** Only works in debug builds (`cargo run`), not release builds
+2. **Network:** Only accepts requests from localhost (127.0.0.1, ::1, localhost)
+
+This is useful for:
+- Testing UI flows with agent-browser
+- API development and debugging
+- Integration testing without OAuth setup
+
+**⚠️ Never use this in production or CI environments.**
+
 ## Code Style Guidelines
 
 ### General Principles
