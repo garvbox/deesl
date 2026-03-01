@@ -30,8 +30,26 @@ const canProceedToMapping = computed(() => {
 });
 
 const canProceedToPreview = computed(() => {
-  return mappings.value.filled_at_date && mappings.value.litres && mappings.value.cost && mappings.value.mileage_km;
+  const mappedFields = Object.values(mappings.value);
+  return mappedFields.includes('filled_at_date') &&
+         mappedFields.includes('litres') &&
+         mappedFields.includes('cost') &&
+         mappedFields.includes('mileage_km');
 });
+
+// Helper to get CSV column name from target field value
+function getColumnForField(fieldValue) {
+  const entry = Object.entries(mappings.value).find(([_, value]) => value === fieldValue);
+  return entry ? entry[0] : null;
+}
+
+function getPreviewValue(row, fieldValue) {
+  const column = getColumnForField(fieldValue);
+  if (!column) return '-';
+  const colIndex = previewData.value.columns.indexOf(column);
+  if (colIndex === -1) return '-';
+  return row[colIndex] || '-';
+}
 
 function handleFileChange(event) {
   file.value = event.target.files[0];
@@ -182,12 +200,12 @@ onMounted(async () => {
         </thead>
         <tbody>
           <tr v-for="(row, index) in previewData.preview.slice(0, 5)" :key="index">
-            <td>{{ row[previewData.columns.indexOf(mappings.filled_at_date)] || '-' }}</td>
-            <td>{{ mappings.filled_at_time ? row[previewData.columns.indexOf(mappings.filled_at_time)] : '-' }}</td>
-            <td>{{ mappings.station ? row[previewData.columns.indexOf(mappings.station)] : '-' }}</td>
-            <td>{{ row[previewData.columns.indexOf(mappings.litres)] || '-' }}</td>
-            <td>{{ row[previewData.columns.indexOf(mappings.cost)] || '-' }}</td>
-            <td>{{ row[previewData.columns.indexOf(mappings.mileage_km)] || '-' }}</td>
+            <td>{{ getPreviewValue(row, 'filled_at_date') }}</td>
+            <td>{{ getPreviewValue(row, 'filled_at_time') }}</td>
+            <td>{{ getPreviewValue(row, 'station') }}</td>
+            <td>{{ getPreviewValue(row, 'litres') }}</td>
+            <td>{{ getPreviewValue(row, 'cost') }}</td>
+            <td>{{ getPreviewValue(row, 'mileage_km') }}</td>
           </tr>
         </tbody>
       </table>
