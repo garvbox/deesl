@@ -1,0 +1,22 @@
+{% if success %}
+    <div class="card" style="background: #d4edda; border-color: #c3e6cb; color: #155724;">
+        <h3>Import Successful</h3>
+        <div style="display: flex; gap: 2rem; margin: 1.5rem 0;">
+            <div><strong>{{ imported }}</strong><br><span style="font-size: 0.8rem;">Imported</span></div>
+            <div><strong>{{ skipped }}</strong><br><span style="font-size: 0.8rem;">Skipped</span></div>
+            <div><strong>{{ stations_created }}</strong><br><span style="font-size: 0.8rem;">Stations Created</span></div>
+        </div>
+        <a href="/dashboard" class="btn">Return to Dashboard</a>
+    </div>
+{% else %}
+    <div class="card" style="background: #f8d7da; border-color: #f5c6cb; color: #721c24;">
+        <h3>Import Failed</h3>
+        <p>Found {{ total_errors }} errors. First 10:</p>
+        <ul>
+            {% for err in errors %}
+                <li>{{ err }}</li>
+            {% endfor %}
+        </ul>
+        <button class="btn btn-outline" onclick="window.location.reload()">Try Again</button>
+    </div>
+{% endif %}

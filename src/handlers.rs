@@ -542,6 +542,10 @@ pub struct UpdateSettingsForm {
     pub currency: String,
 }
 
+#[derive(Template)]
+#[template(path = "fragments/settings_success.html")]
+pub struct SettingsSuccessTemplate {}
+
 pub async fn update_settings(
     State(pool): State<Pool>,
     user: AuthUser,
@@ -562,9 +566,8 @@ pub async fn update_settings(
     .map_err(internal_error)?
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    Ok(Html(
-        r#"<p style="color: #28a745; font-size: 0.875rem; margin-top: 0.5rem;">Preferences saved successfully!</p>"#,
-    ))
+    let template = SettingsSuccessTemplate {};
+    Ok(Html(template.render().map_err(internal_error)?))
 }
 
 #[derive(Template)]
@@ -726,6 +729,12 @@ pub struct VehicleCardTemplate {
     pub registration: String,
 }
 
+#[derive(Template)]
+#[template(path = "fragments/vehicle_list.html")]
+pub struct VehicleListTemplate {
+    pub vehicles: Vec<Vehicle>,
+}
+
 pub async fn htmx_vehicles(
     State(pool): State<Pool>,
     user: AuthUser,
@@ -744,25 +753,10 @@ pub async fn htmx_vehicles(
         .map_err(internal_error)?
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    if user_vehicles.is_empty() {
-        return Ok(Html(
-            r#"<p style="color: var(--text-muted);">No vehicles found. Add one to get started!</p>"#.to_string(),
-        ).into_response());
-    }
-
-    let mut html = String::from(r#"<div style="display: grid; gap: 1rem;">"#);
-    for v in user_vehicles {
-        let card = VehicleCardTemplate {
-            id: v.id,
-            make: v.make,
-            model: v.model,
-            registration: v.registration,
-        };
-        html.push_str(&card.render().map_err(internal_error)?);
-    }
-    html.push_str("</div>");
-
-    Ok(Html(html).into_response())
+    let template = VehicleListTemplate {
+        vehicles: user_vehicles,
+    };
+    Ok(Html(template.render().map_err(internal_error)?))
 }
 
 pub async fn htmx_delete_vehicle(
@@ -788,6 +782,18 @@ pub async fn htmx_delete_vehicle(
     Ok(Html(""))
 }
 
+#[derive(Template)]
+#[template(path = "fragments/recent_entries.html")]
+pub struct RecentEntriesTemplate {
+    pub entries: Vec<(crate::models::FuelEntry, Vehicle)>,
+}
+
+impl RecentEntriesTemplate {
+    pub fn format_float(&self, val: &f64) -> String {
+        format!("{:.2}", val)
+    }
+}
+
 pub async fn htmx_recent_entries(
     State(pool): State<Pool>,
     user: AuthUser,
@@ -809,44 +815,8 @@ pub async fn htmx_recent_entries(
         .map_err(internal_error)?
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    if entries.is_empty() {
-        return Ok(
-            Html(r#"<p style="color: var(--text-muted);">No entries yet.</p>"#.to_string())
-                .into_response(),
-        );
-    }
-
-    let mut html = String::from(
-        r#"<table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
-            <thead>
-                <tr style="text-align: left; border-bottom: 1px solid var(--border);">
-                    <th style="padding: 0.5rem;">Date</th>
-                    <th style="padding: 0.5rem;">Vehicle</th>
-                    <th style="padding: 0.5rem;">Litres</th>
-                    <th style="padding: 0.5rem;">Cost</th>
-                </tr>
-            </thead>
-            <tbody>"#,
-    );
-
-    for (e, v) in entries {
-        html.push_str(&format!(
-            r#"<tr style="border-bottom: 1px solid var(--border);">
-                <td style="padding: 0.5rem;">{}</td>
-                <td style="padding: 0.5rem;">{}</td>
-                <td style="padding: 0.5rem;">{:.2} L</td>
-                <td style="padding: 0.5rem;">€{:.2}</td>
-            </tr>"#,
-            e.filled_at.format("%Y-%m-%d"),
-            v.registration,
-            e.litres,
-            e.cost
-        ));
-    }
-
-    html.push_str("</tbody></table>");
-
-    Ok(Html(html).into_response())
+    let template = RecentEntriesTemplate { entries };
+    Ok(Html(template.render().map_err(internal_error)?))
 }
 
 #[derive(Template)]
@@ -977,6 +947,17 @@ pub async fn htmx_import_preview(
     Ok(Html(template.render().map_err(internal_error)?))
 }
 
+#[derive(Template)]
+#[template(path = "fragments/import_result.html")]
+pub struct ImportResultTemplate {
+    pub success: bool,
+    pub imported: usize,
+    pub skipped: usize,
+    pub stations_created: usize,
+    pub total_errors: usize,
+    pub errors: Vec<String>,
+}
+
 pub async fn htmx_import_execute(
     State(pool): State<Pool>,
     user: AuthUser,
@@ -1025,36 +1006,27 @@ pub async fn htmx_import_execute(
 
     let result = perform_import(&pool, user.user_id, vehicle_id, csv_data, actual_mappings).await?;
 
-    if result.total_errors > 0 && result.imported == 0 {
-        let mut error_list = String::from("<ul>");
-        for err in result.errors {
-            error_list.push_str(&format!("<li>{}</li>", err));
+    let template = if result.total_errors > 0 && result.imported == 0 {
+        ImportResultTemplate {
+            success: false,
+            imported: 0,
+            skipped: 0,
+            stations_created: 0,
+            total_errors: result.total_errors,
+            errors: result.errors,
         }
-        error_list.push_str("</ul>");
+    } else {
+        ImportResultTemplate {
+            success: true,
+            imported: result.imported,
+            skipped: result.skipped,
+            stations_created: result.stations_created,
+            total_errors: result.total_errors,
+            errors: result.errors,
+        }
+    };
 
-        return Ok(Html(format!(
-            r#"<div class="card" style="background: #f8d7da; border-color: #f5c6cb; color: #721c24;">
-                <h3>Import Failed</h3>
-                <p>Found {} errors. First 10:</p>
-                {}
-                <button class="btn btn-outline" onclick="window.location.reload()">Try Again</button>
-            </div>"#,
-            result.total_errors, error_list
-        )));
-    }
-
-    Ok(Html(format!(
-        r#"<div class="card" style="background: #d4edda; border-color: #c3e6cb; color: #155724;">
-            <h3>Import Successful</h3>
-            <div style="display: flex; gap: 2rem; margin: 1.5rem 0;">
-                <div><strong>{}</strong><br><span style="font-size: 0.8rem;">Imported</span></div>
-                <div><strong>{}</strong><br><span style="font-size: 0.8rem;">Skipped</span></div>
-                <div><strong>{}</strong><br><span style="font-size: 0.8rem;">Stations Created</span></div>
-            </div>
-            <a href="/dashboard" class="btn">Return to Dashboard</a>
-        </div>"#,
-        result.imported, result.skipped, result.stations_created
-    )))
+    Ok(Html(template.render().map_err(internal_error)?))
 }
 
 #[cfg(test)]

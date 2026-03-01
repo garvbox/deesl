@@ -1,0 +1,24 @@
+{% if entries.is_empty() %}
+    <p style="color: var(--text-muted);">No entries yet.</p>
+{% else %}
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+        <thead>
+            <tr style="text-align: left; border-bottom: 1px solid var(--border);">
+                <th style="padding: 0.5rem;">Date</th>
+                <th style="padding: 0.5rem;">Vehicle</th>
+                <th style="padding: 0.5rem;">Litres</th>
+                <th style="padding: 0.5rem;">Cost</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for (e, v) in entries %}
+            <tr style="border-bottom: 1px solid var(--border);">
+                <td style="padding: 0.5rem;">{{ e.filled_at.format("%Y-%m-%d") }}</td>
+                <td style="padding: 0.5rem;">{{ v.registration }}</td>
+                <td style="padding: 0.5rem;">{{ self.format_float(e.litres) }} L</td>
+                <td style="padding: 0.5rem;">€{{ self.format_float(e.cost) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endif %}

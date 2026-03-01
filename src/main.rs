@@ -161,14 +161,18 @@ fn build_security_headers() -> SecurityHeadersLayer {
         .content_security_policy(
             ContentSecurityPolicy::new()
                 .default_src(vec!["'self'"])
-                .script_src(vec!["'self'", "'unsafe-inline'", "https://unpkg.com"])
+                .script_src(vec![
+                    "'self'",
+                    "'unsafe-inline'",
+                    "https://unpkg.com/htmx.org@2.0.0",
+                ])
                 .style_src(vec!["'self'", "'unsafe-inline'"])
-                .img_src(vec!["'self'", "data:", "https:"])
-                .connect_src(vec!["'self'"])
+                .img_src(vec!["'self'", "data:", "https://*.googleusercontent.com"])
+                .connect_src(vec!["'self'", "https://www.googleapis.com"])
                 .font_src(vec!["'self'"])
                 .object_src(vec!["'none'"])
                 .base_uri(vec!["'self'"])
-                .form_action(vec!["'self'"])
+                .form_action(vec!["'self'", "https://accounts.google.com"])
                 .frame_ancestors(vec!["'none'"]),
         )
         .referrer_policy(ReferrerPolicy::StrictOriginWhenCrossOrigin)
