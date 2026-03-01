@@ -164,7 +164,7 @@ fn build_security_headers() -> SecurityHeadersLayer {
                 .script_src(vec![
                     "'self'",
                     "'unsafe-inline'",
-                    "https://unpkg.com/htmx.org@2.0.0",
+                    "https://unpkg.com/htmx.org@2.0.0/dist/htmx.min.js",
                 ])
                 .style_src(vec!["'self'", "'unsafe-inline'"])
                 .img_src(vec!["'self'", "data:", "https://*.googleusercontent.com"])

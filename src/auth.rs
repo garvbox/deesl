@@ -109,42 +109,14 @@ where
     }
 }
 
-pub fn is_dev_auth_bypass_allowed(headers: &HeaderMap) -> Option<String> {
+pub fn is_dev_auth_bypass_allowed(_headers: &HeaderMap) -> Option<String> {
     // Layer 1: Compile-time check - only in debug builds
-    // This prevents the bypass from working in release builds (production)
     if cfg!(not(debug_assertions)) {
         return None;
     }
 
-    // Layer 2: DEV_AUTH_EMAIL must be set (this is the bypass trigger)
-    let email = std::env::var(DEV_AUTH_EMAIL_KEY).ok()?;
-
-    // Layer 3: Only allow from localhost (127.0.0.1, ::1, localhost)
-    let is_localhost = headers
-        .get("host")
-        .and_then(|h| h.to_str().ok())
-        .map(|host| {
-            host.starts_with("localhost:")
-                || host.starts_with("127.0.0.1:")
-                || host == "localhost"
-                || host == "127.0.0.1"
-                || host.starts_with("[::1]:")
-                || host == "[::1]"
-        })
-        .unwrap_or(false);
-
-    // Also check X-Forwarded-For if behind a proxy
-    let is_localhost_forwarded = headers
-        .get("x-forwarded-for")
-        .and_then(|h| h.to_str().ok())
-        .map(|ip| ip == "127.0.0.1" || ip == "::1" || ip == "localhost")
-        .unwrap_or(true);
-
-    if is_localhost && is_localhost_forwarded {
-        Some(email)
-    } else {
-        None
-    }
+    // Layer 2: DEV_AUTH_EMAIL must be set
+    std::env::var(DEV_AUTH_EMAIL_KEY).ok()
 }
 
 pub fn extract_auth_user(headers: &HeaderMap) -> Result<AuthUser, (StatusCode, String)> {
