@@ -1,7 +1,7 @@
 use axum::{
     extract::FromRequestParts,
     http::{HeaderMap, StatusCode, request::Parts},
-    response::{IntoResponse, Redirect},
+    response::Redirect,
 };
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};

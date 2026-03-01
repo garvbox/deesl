@@ -4,13 +4,11 @@ use axum::{
     extract::{Multipart, State},
     http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse, Redirect},
-    routing::patch,
 };
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
 use serde::Deserialize;
 
-use crate::AppState;
 use crate::auth::{AuthUser, AuthUserRedirect};
 use crate::models::{NewVehicle, User, Vehicle};
 use crate::schema::{users, vehicles};
