@@ -39,6 +39,9 @@ cargo build
 ```
 
 ### Linting & Formatting
+
+**IMPORTANT: Always run `cargo fmt` after modifying Rust files before committing.**
+
 ```bash
 # Run all lints (via pre-commit)
 pre-commit run --all-files
@@ -124,7 +127,7 @@ This is useful for:
 
 ### Formatting
 - Follow standard Rust formatting conventions
-- Run `cargo fmt` before committing
+- **MUST run `cargo fmt` after any Rust file modifications**
 
 ### Types
 - Use explicit types in public APIs
