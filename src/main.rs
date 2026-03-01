@@ -20,9 +20,8 @@ use tracing::info;
 use utoipa::OpenApi;
 
 use deesl::{
-    AppState, api_doc, import_handlers, models::{NewUser}, oauth_handlers, 
-    schema::users, user_handlers, vehicle_fuel_handlers,
-    vehicle_share_handlers, auth::DEV_AUTH_EMAIL_KEY,
+    AppState, api_doc, auth::DEV_AUTH_EMAIL_KEY, import_handlers, models::NewUser, oauth_handlers,
+    schema::users, user_handlers, vehicle_fuel_handlers, vehicle_share_handlers,
 };
 
 async fn serve_openapi() -> axum::response::Json<String> {
@@ -107,17 +106,17 @@ async fn ensure_dev_user_exists(pool: &Pool) {
     let email_clone = email.clone();
     let result = conn.interact(move |conn| {
         use diesel::dsl::exists;
-        
+
         // Check if user already exists
         let user_exists: bool = diesel::select(exists(
             users::table.filter(users::email.eq(&email_clone))
         )).get_result(conn)?;
-        
+
         if user_exists {
             tracing::info!("Dev user {} already exists", email_clone);
             return Ok::<(), diesel::result::Error>(());
         }
-        
+
         // Try to insert with ID 1 first (for auth bypass compatibility)
         let insert_with_id_result = diesel::sql_query(
             "INSERT INTO users (id, email, password_hash, currency, google_id) \
@@ -126,7 +125,7 @@ async fn ensure_dev_user_exists(pool: &Pool) {
         )
         .bind::<diesel::sql_types::Text, _>(&email_clone)
         .execute(conn);
-        
+
         match insert_with_id_result {
             Ok(_) => {
                 tracing::info!("Created dev user with ID 1: {}", email_clone);
@@ -139,15 +138,15 @@ async fn ensure_dev_user_exists(pool: &Pool) {
                     currency: "EUR".to_string(),
                     google_id: None,
                 };
-                
+
                 diesel::insert_into(users::table)
                     .values(&new_user)
                     .execute(conn)?;
-                
+
                 tracing::warn!("Created dev user {} with auto-generated ID (expected ID 1 for auth bypass)", email_clone);
             }
         }
-        
+
         Ok(())
     }).await;
 
@@ -164,10 +163,10 @@ async fn main() {
 
     let manager = Manager::new(&config.database_url, deadpool_diesel::Runtime::Tokio1);
     let pool = Pool::builder(manager).build().unwrap();
-    
+
     // Ensure dev user exists if DEV_AUTH_EMAIL is set (debug builds only)
     ensure_dev_user_exists(&pool).await;
-    
+
     let app_state = AppState {
         pool,
         oauth: oauth_handlers::OAuthConfig::new(&config.base_url),
