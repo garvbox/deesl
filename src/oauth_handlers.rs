@@ -13,7 +13,7 @@ use oauth2::{
 use serde::Deserialize;
 use std::env;
 
-use crate::auth::AuthConfig;
+use crate::auth::{AuthConfig, extract_auth_user};
 use crate::handlers::internal_error;
 use crate::models::User;
 use crate::schema::users;
@@ -242,17 +242,12 @@ pub struct CurrentUserResponse {
 pub async fn get_current_user(
     req_headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let token = extract_cookie(&req_headers, "auth_token")
-        .ok_or((StatusCode::UNAUTHORIZED, "Missing auth token".to_string()))?;
-
-    let auth_config = AuthConfig::new();
-    let claims = auth_config
-        .validate_token(&token)
-        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
-
+    // Use extract_auth_user to support dev auth bypass
+    let auth_user = extract_auth_user(&req_headers)?;
+    
     Ok(Json(CurrentUserResponse {
-        user_id: claims.user_id,
-        email: claims.sub,
+        user_id: auth_user.user_id,
+        email: auth_user.email,
     }))
 }
 
