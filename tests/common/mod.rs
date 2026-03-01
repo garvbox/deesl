@@ -24,10 +24,10 @@ pub async fn create_test_pool() -> Pool {
 
 /// Creates a test app with the given database pool
 pub async fn create_test_app(pool: Pool) -> Router {
+    use axum::routing::{delete, get, post};
     use deesl::handlers;
     use deesl::oauth_handlers;
     use tower_http::trace::TraceLayer;
-    use axum::routing::{get, post, delete};
 
     let app_state = deesl::AppState {
         pool,
@@ -35,12 +35,21 @@ pub async fn create_test_app(pool: Pool) -> Router {
     };
 
     Router::new()
-        .route("/", get(|| async { axum::response::Redirect::to("/dashboard") }))
+        .route(
+            "/",
+            get(|| async { axum::response::Redirect::to("/dashboard") }),
+        )
         .route("/login", get(handlers::login))
         .route("/logout", get(oauth_handlers::logout))
         .route("/dashboard", get(handlers::dashboard))
-        .route("/settings", get(handlers::settings_page).patch(handlers::update_settings))
-        .route("/vehicles", get(handlers::vehicles_page).post(handlers::create_vehicle))
+        .route(
+            "/settings",
+            get(handlers::settings_page).patch(handlers::update_settings),
+        )
+        .route(
+            "/vehicles",
+            get(handlers::vehicles_page).post(handlers::create_vehicle),
+        )
         .route("/vehicles/new", get(handlers::new_vehicle))
         .route("/fuel-entries/new", get(handlers::new_fuel_entry))
         .route("/fuel-entries", post(handlers::create_fuel_entry))
@@ -217,15 +226,16 @@ pub async fn create_test_fuel_entry_db(
 pub async fn cleanup_test_data(pool: &Pool) {
     let conn = pool.get().await.unwrap();
 
-    let _ = conn.interact(|conn| {
-        diesel::delete(fuel_entries::table).execute(conn)?;
-        diesel::delete(deesl::schema::vehicle_shares::table).execute(conn)?;
-        diesel::delete(fuel_stations::table).execute(conn)?;
-        diesel::delete(vehicles::table).execute(conn)?;
-        diesel::delete(users::table).execute(conn)?;
-        Ok::<_, diesel::result::Error>(())
-    })
-    .await;
+    let _ = conn
+        .interact(|conn| {
+            diesel::delete(fuel_entries::table).execute(conn)?;
+            diesel::delete(deesl::schema::vehicle_shares::table).execute(conn)?;
+            diesel::delete(fuel_stations::table).execute(conn)?;
+            diesel::delete(vehicles::table).execute(conn)?;
+            diesel::delete(users::table).execute(conn)?;
+            Ok::<_, diesel::result::Error>(())
+        })
+        .await;
 }
 
 pub async fn post_import_csv(

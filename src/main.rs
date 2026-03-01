@@ -16,8 +16,7 @@ use tower_livereload::LiveReloadLayer;
 use tracing::info;
 
 use deesl::{
-    AppState, auth::DEV_AUTH_EMAIL_KEY, handlers, models::NewUser,
-    oauth_handlers, schema::users,
+    AppState, auth::DEV_AUTH_EMAIL_KEY, handlers, models::NewUser, oauth_handlers, schema::users,
 };
 
 async fn serve_version() -> axum::response::Json<serde_json::Value> {
@@ -68,7 +67,10 @@ async fn main() {
         .expect("Failed to create pool");
 
     // Run migrations
-    let conn = pool.get().await.expect("Failed to get connection from pool");
+    let conn = pool
+        .get()
+        .await
+        .expect("Failed to get connection from pool");
     conn.interact(|conn| {
         use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
         const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
@@ -84,24 +86,25 @@ async fn main() {
             let pool_clone = pool.clone();
             let _ = tokio::spawn(async move {
                 if let Ok(conn) = pool_clone.get().await {
-                    let _ = conn.interact(move |conn| {
-                        let exists = users::table
-                            .filter(users::email.eq(&dev_email))
-                            .first::<deesl::models::User>(conn)
-                            .is_ok();
+                    let _ = conn
+                        .interact(move |conn| {
+                            let exists = users::table
+                                .filter(users::email.eq(&dev_email))
+                                .first::<deesl::models::User>(conn)
+                                .is_ok();
 
-                        if !exists {
-                            let _ = diesel::insert_into(users::table)
-                                .values(NewUser {
-                                    email: dev_email,
-                                    password_hash: None,
-                                    google_id: None,
-                                    currency: "EUR".to_string(),
-                                })
-                                .execute(conn);
-                        }
-                    })
-                    .await;
+                            if !exists {
+                                let _ = diesel::insert_into(users::table)
+                                    .values(NewUser {
+                                        email: dev_email,
+                                        password_hash: None,
+                                        google_id: None,
+                                        currency: "EUR".to_string(),
+                                    })
+                                    .execute(conn);
+                            }
+                        })
+                        .await;
                 }
             });
         }
@@ -113,12 +116,21 @@ async fn main() {
     };
 
     let mut app = Router::new()
-        .route("/", get(|| async { axum::response::Redirect::to("/dashboard") }))
+        .route(
+            "/",
+            get(|| async { axum::response::Redirect::to("/dashboard") }),
+        )
         .route("/login", get(handlers::login))
         .route("/logout", get(oauth_handlers::logout))
         .route("/dashboard", get(handlers::dashboard))
-        .route("/settings", get(handlers::settings_page).patch(handlers::update_settings))
-        .route("/vehicles", get(handlers::vehicles_page).post(handlers::create_vehicle))
+        .route(
+            "/settings",
+            get(handlers::settings_page).patch(handlers::update_settings),
+        )
+        .route(
+            "/vehicles",
+            get(handlers::vehicles_page).post(handlers::create_vehicle),
+        )
         .route("/vehicles/new", get(handlers::new_vehicle))
         .route("/fuel-entries/new", get(handlers::new_fuel_entry))
         .route("/fuel-entries", post(handlers::create_fuel_entry))
@@ -146,17 +158,18 @@ async fn main() {
 
 fn build_security_headers() -> SecurityHeadersLayer {
     let headers = SecurityHeaders::builder()
-        .content_security_policy(ContentSecurityPolicy::new()
-            .default_src(vec!["'self'"])
-            .script_src(vec!["'self'", "'unsafe-inline'", "https://unpkg.com"])
-            .style_src(vec!["'self'", "'unsafe-inline'"])
-            .img_src(vec!["'self'", "data:", "https:"])
-            .connect_src(vec!["'self'"])
-            .font_src(vec!["'self'"])
-            .object_src(vec!["'none'"])
-            .base_uri(vec!["'self'"])
-            .form_action(vec!["'self'"])
-            .frame_ancestors(vec!["'none'"])
+        .content_security_policy(
+            ContentSecurityPolicy::new()
+                .default_src(vec!["'self'"])
+                .script_src(vec!["'self'", "'unsafe-inline'", "https://unpkg.com"])
+                .style_src(vec!["'self'", "'unsafe-inline'"])
+                .img_src(vec!["'self'", "data:", "https:"])
+                .connect_src(vec!["'self'"])
+                .font_src(vec!["'self'"])
+                .object_src(vec!["'none'"])
+                .base_uri(vec!["'self'"])
+                .form_action(vec!["'self'"])
+                .frame_ancestors(vec!["'none'"]),
         )
         .referrer_policy(ReferrerPolicy::StrictOriginWhenCrossOrigin)
         .cross_origin_opener_policy(CrossOriginOpenerPolicy::SameOrigin)

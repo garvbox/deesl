@@ -5,15 +5,15 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse, Redirect},
 };
+use chrono::Datelike;
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::Datelike;
 
 use crate::auth::{AuthUser, AuthUserRedirect};
-use crate::models::{NewVehicle, User, Vehicle, FuelStation, NewFuelStation};
-use crate::schema::{users, vehicles, fuel_stations};
+use crate::models::{FuelStation, NewFuelStation, NewVehicle, User, Vehicle};
+use crate::schema::{fuel_stations, users, vehicles};
 
 /// Utility function for mapping any error into a `500 Internal Server Error`
 pub fn internal_error<E>(err: E) -> (StatusCode, String)
@@ -810,9 +810,10 @@ pub async fn htmx_recent_entries(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     if entries.is_empty() {
-        return Ok(Html(
-            r#"<p style="color: var(--text-muted);">No entries yet.</p>"#.to_string(),
-        ).into_response());
+        return Ok(
+            Html(r#"<p style="color: var(--text-muted);">No entries yet.</p>"#.to_string())
+                .into_response(),
+        );
     }
 
     let mut html = String::from(
@@ -891,7 +892,10 @@ pub struct ImportMappingTemplate {
 
 impl ImportMappingTemplate {
     pub fn is_mapped(&self, column: &str, target: &str) -> bool {
-        self.suggested_mappings.get(column).map(|s| s == target).unwrap_or(false)
+        self.suggested_mappings
+            .get(column)
+            .map(|s| s == target)
+            .unwrap_or(false)
     }
 }
 
@@ -910,12 +914,10 @@ pub async fn htmx_import_preview(
         match name.as_str() {
             "file" => csv_data = Some(data.to_vec()),
             "vehicle_id" => {
-                vehicle_id = Some(
-                    String::from_utf8_lossy(&data)
-                        .trim()
-                        .parse()
-                        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid vehicle_id".to_string()))?,
-                );
+                vehicle_id =
+                    Some(String::from_utf8_lossy(&data).trim().parse().map_err(|_| {
+                        (StatusCode::BAD_REQUEST, "Invalid vehicle_id".to_string())
+                    })?);
             }
             _ => {}
         }
@@ -991,12 +993,10 @@ pub async fn htmx_import_execute(
         match name.as_str() {
             "file" => csv_data = Some(data.to_vec()),
             "vehicle_id" => {
-                vehicle_id = Some(
-                    String::from_utf8_lossy(&data)
-                        .trim()
-                        .parse()
-                        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid vehicle_id".to_string()))?,
-                );
+                vehicle_id =
+                    Some(String::from_utf8_lossy(&data).trim().parse().map_err(|_| {
+                        (StatusCode::BAD_REQUEST, "Invalid vehicle_id".to_string())
+                    })?);
             }
             _ if name.starts_with("map_") => {
                 mappings_raw.insert(name, String::from_utf8_lossy(&data).to_string());
