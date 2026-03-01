@@ -173,6 +173,11 @@ async fn main() {
     };
 
     let mut app = Router::new()
+        .route("/", get(|| async { axum::response::Redirect::to("/dashboard") }))
+        .route("/login", get(handlers::login))
+        .route("/dashboard", get(handlers::dashboard))
+        .route("/htmx/vehicles", get(handlers::htmx_vehicles))
+        .route("/htmx/entries/recent", get(handlers::htmx_recent_entries))
         .route("/api/version", get(serve_version))
         .route("/api/openapi.json", get(serve_openapi))
         .merge(oauth_handlers::router())

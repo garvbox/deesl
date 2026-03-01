@@ -1,4 +1,8 @@
-use axum::http::{HeaderMap, StatusCode};
+use axum::{
+    extract::FromRequestParts,
+    http::{HeaderMap, StatusCode, request::Parts},
+    response::{IntoResponse, Redirect},
+};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 
@@ -74,8 +78,35 @@ impl AuthConfig {
 #[derive(Debug, Clone)]
 pub struct AuthUser {
     pub user_id: i32,
-    #[allow(dead_code)]
     pub email: String,
+}
+
+impl<S> FromRequestParts<S> for AuthUser
+where
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, String);
+
+    async fn from_request_parts(parts: &Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        extract_auth_user(&parts.headers)
+    }
+}
+
+/// A wrapper for AuthUser that redirects to /login on failure for standard page requests.
+pub struct AuthUserRedirect(pub AuthUser);
+
+impl<S> FromRequestParts<S> for AuthUserRedirect
+where
+    S: Send + Sync,
+{
+    type Rejection = Redirect;
+
+    async fn from_request_parts(parts: &Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        match extract_auth_user(&parts.headers) {
+            Ok(user) => Ok(AuthUserRedirect(user)),
+            Err(_) => Err(Redirect::to("/login")),
+        }
+    }
 }
 
 pub fn is_dev_auth_bypass_allowed(headers: &HeaderMap) -> Option<String> {

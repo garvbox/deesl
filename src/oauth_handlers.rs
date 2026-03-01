@@ -230,7 +230,7 @@ pub async fn google_callback(
     resp_headers.insert(header::SET_COOKIE, clear_csrf_cookie.parse().unwrap());
     resp_headers.insert(header::SET_COOKIE, auth_cookie.parse().unwrap());
 
-    Ok((resp_headers, Redirect::to("/")))
+    Ok((resp_headers, Redirect::to("/dashboard")))
 }
 
 #[derive(serde::Serialize)]
