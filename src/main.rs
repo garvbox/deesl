@@ -141,12 +141,17 @@ async fn main() {
         )
         .route("/stations/{id}", post(handlers::update_station))
         .route("/stations/{id}", delete(handlers::delete_station))
+        .route("/stats", get(handlers::stats_page))
         .route("/import", get(handlers::import_page))
         .route("/htmx/import/preview", post(handlers::htmx_import_preview))
         .route("/htmx/import/execute", post(handlers::htmx_import_execute))
         .route("/htmx/vehicles", get(handlers::htmx_vehicles))
         .route("/htmx/vehicles/{id}", delete(handlers::htmx_delete_vehicle))
         .route("/htmx/entries/recent", get(handlers::htmx_recent_entries))
+        .route(
+            "/htmx/entries/{id}",
+            delete(handlers::htmx_delete_fuel_entry),
+        )
         .route("/htmx/stations/search", get(handlers::htmx_station_search))
         .route("/api/version", get(serve_version))
         .merge(oauth_handlers::router())

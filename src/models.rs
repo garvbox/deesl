@@ -23,7 +23,7 @@ pub struct NewUser {
     pub google_id: Option<String>,
 }
 
-#[derive(Queryable, Selectable, serde::Serialize)]
+#[derive(Queryable, Selectable, serde::Serialize, Clone)]
 #[diesel(table_name = crate::schema::vehicles)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Vehicle {

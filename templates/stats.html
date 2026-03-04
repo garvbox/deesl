@@ -1,0 +1,167 @@
+{% extends "layout.html" %}
+
+{% block title %}Usage Stats - Deesl{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1>📊 Usage Statistics</h1>
+</div>
+
+{% if !has_data %}
+    <div class="card fade-in">
+        <div class="empty-state">
+            <div class="empty-state-icon">📈</div>
+            <h3>No Data Yet</h3>
+            <p>Add some fuel entries to see your usage statistics and charts.</p>
+            <a href="/fuel-entries/new" class="btn" style="margin-top: 1rem;">Add First Entry</a>
+        </div>
+    </div>
+{% else %}
+    <!-- Summary Cards -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        <div class="card" style="text-align: center; margin-bottom: 0;">
+            <div style="font-size: 2rem; font-weight: 700; color: var(--primary);">{{ total_entries }}</div>
+            <div style="color: var(--text-muted); font-size: 0.875rem;">Total Entries</div>
+        </div>
+        <div class="card" style="text-align: center; margin-bottom: 0;">
+            <div style="font-size: 2rem; font-weight: 700; color: var(--primary);">{{ "{:.1}"|format(total_litres) }} L</div>
+            <div style="color: var(--text-muted); font-size: 0.875rem;">Total Fuel</div>
+        </div>
+        <div class="card" style="text-align: center; margin-bottom: 0;">
+            <div style="font-size: 2rem; font-weight: 700; color: var(--primary);">€{{ "{:.0}"|format(total_cost) }}</div>
+            <div style="color: var(--text-muted); font-size: 0.875rem;">Total Cost</div>
+        </div>
+        <div class="card" style="text-align: center; margin-bottom: 0;">
+            <div style="font-size: 2rem; font-weight: 700; color: var(--success);">{{ "{:.1}"|format(avg_efficiency) }}</div>
+            <div style="color: var(--text-muted); font-size: 0.875rem;">km/L (Avg)</div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    {% if !efficiency_data.is_empty() %}
+    <div class="card fade-in">
+        <div class="card-header">
+            <div class="card-title">Efficiency Over Time</div>
+        </div>
+        <div style="position: relative; height: 300px;">
+            <canvas id="efficiencyChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card fade-in">
+        <div class="card-header">
+            <div class="card-title">Cost Per km Over Time</div>
+        </div>
+        <div style="position: relative; height: 300px;">
+            <canvas id="costChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        console.log('Chart data:', {{ labels|json }}, {{ efficiency_data|json }}, {{ cost_per_km_data|json }});
+        
+        const efficiencyCtx = document.getElementById('efficiencyChart').getContext('2d');
+        new Chart(efficiencyCtx, {
+            type: 'line',
+            data: {
+                labels: {{ labels|json }},
+                datasets: [{
+                    label: 'km per Litre',
+                    data: {{ efficiency_data|json }},
+                    borderColor: 'rgb(16, 185, 129)',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'km/L' }
+                    }
+                }
+            }
+        });
+
+        const costCtx = document.getElementById('costChart').getContext('2d');
+        new Chart(costCtx, {
+            type: 'line',
+            data: {
+                labels: {{ labels|json }},
+                datasets: [{
+                    label: 'Cost per km',
+                    data: {{ cost_per_km_data|json }},
+                    borderColor: 'rgb(59, 130, 246)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: '€/km' }
+                    }
+                }
+            }
+        });
+    </script>
+    {% else %}
+    <div class="card fade-in">
+        <div class="empty-state">
+            <div class="empty-state-icon">📊</div>
+            <p><strong>Not enough data for trend charts.</strong></p>
+            <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 0.5rem;">
+                Charts require at least 2 fuel entries per vehicle with increasing mileage to calculate efficiency trends.
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Vehicle Statistics -->
+    <div class="card fade-in">
+        <div class="card-header">
+            <div class="card-title">Vehicle Statistics</div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Vehicle</th>
+                    <th>Entries</th>
+                    <th>Total KM</th>
+                    <th>Total Litres</th>
+                    <th>Avg km/L</th>
+                    <th>Total Cost</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in vehicle_stats %}
+                <tr>
+                    <td>
+                        <div style="font-weight: 500;">{{ v.make }} {{ v.model }}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">{{ v.registration }}</div>
+                    </td>
+                    <td>{{ v.total_entries }}</td>
+                    <td>{{ "{:.0}"|format(v.total_km) }}</td>
+                    <td>{{ "{:.1}"|format(v.total_litres) }} L</td>
+                    <td style="color: var(--success); font-weight: 600;">{{ "{:.1}"|format(v.avg_efficiency) }}</td>
+                    <td>€{{ "{:.2}"|format(v.total_cost) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endif %}
+{% endblock %}
