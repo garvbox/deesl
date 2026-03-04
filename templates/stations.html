@@ -5,51 +5,57 @@
 {% block content %}
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
     <h1>Station Manager</h1>
-    <a href="/dashboard" class="btn btn-outline">Back to Dashboard</a>
+    <a href="/dashboard" class="btn btn-outline">← Back to Dashboard</a>
 </div>
 
-<div class="card" style="margin-bottom: 2rem;">
-    <h3>Add New Station</h3>
+<div class="card fade-in" style="margin-bottom: 2rem;">
+    <div class="card-header">
+        <div class="card-title">Add New Station</div>
+    </div>
     <form action="/stations" method="post" style="display: flex; gap: 1rem; align-items: flex-end;">
-        <label style="flex: 1; margin-bottom: 0;">
-            Station Name
-            <input type="text" name="name" placeholder="e.g., Shell, Circle K" required>
-        </label>
+        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+            <label for="station-name">Station Name</label>
+            <input type="text" id="station-name" name="name" placeholder="e.g., Shell, Circle K" required>
+        </div>
         <button type="submit">Add Station</button>
     </form>
 </div>
 
-<div class="card">
-    <h3>Your Stations</h3>
+<div class="card fade-in">
+    <div class="card-header">
+        <div class="card-title">Your Stations</div>
+    </div>
     {% if stations.is_empty() %}
-        <p style="color: var(--text-muted);">No stations yet. Add your first station above.</p>
+        <div class="empty-state">
+            <div class="empty-state-icon">⛽</div>
+            <p>No stations yet. Add your first station above.</p>
+        </div>
     {% else %}
-        <table style="width: 100%; border-collapse: collapse;">
+        <table>
             <thead>
-                <tr style="text-align: left; border-bottom: 1px solid var(--border);">
-                    <th style="padding: 0.75rem;">Name</th>
-                    <th style="padding: 0.75rem; width: 200px;">Actions</th>
+                <tr>
+                    <th>Name</th>
+                    <th style="width: 200px;">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for station in stations %}
-                <tr style="border-bottom: 1px solid var(--border);" id="station-{{ station.id }}">
-                    <td style="padding: 0.75rem;">
+                <tr id="station-{{ station.id }}">
+                    <td>
                         {% if station.user_id.is_none() %}
-                            <span style="color: var(--text-muted); font-style: italic;">{{ station.name }} (global)</span>
+                            <span style="color: var(--text-muted); font-style: italic;">{{ station.name }} (system)</span>
                         {% else %}
-                            <span id="station-name-{{ station.id }}">{{ station.name }}</span>
+                            <span id="station-name-{{ station.id }}" style="font-weight: 500;">{{ station.name }}</span>
                         {% endif %}
                     </td>
-                    <td style="padding: 0.75rem;">
+                    <td>
                         {% if station.user_id.is_some() %}
                             <div style="display: flex; gap: 0.5rem;">
                                 <button type="button" 
                                         class="btn btn-small btn-outline"
                                         onclick="toggleEditForm({{ station.id }})">Edit</button>
                                 <button type="button" 
-                                        class="btn btn-small btn-outline"
-                                        style="color: var(--error); border-color: var(--error);"
+                                        class="btn btn-small btn-outline btn-danger"
                                         hx-delete="/stations/{{ station.id }}"
                                         hx-target="#station-{{ station.id }}"
                                         hx-swap="outerHTML"
@@ -66,7 +72,7 @@
                                 </div>
                             </form>
                         {% else %}
-                            <span style="color: var(--text-muted); font-size: 0.85rem;">System station</span>
+                            <span style="color: var(--text-muted); font-size: 0.85rem; font-style: italic;">Read-only</span>
                         {% endif %}
                     </td>
                 </tr>

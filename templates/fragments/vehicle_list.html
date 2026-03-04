@@ -1,16 +1,18 @@
 {% if vehicles.is_empty() %}
-    <p id="no-vehicles" style="color: var(--text-muted);">No vehicles found. Add one to get started!</p>
+    <div class="empty-state">
+        <div class="empty-state-icon">🚗</div>
+        <p>No vehicles found. Add your first vehicle to get started!</p>
+    </div>
 {% else %}
-    <div style="display: grid; gap: 1rem;">
+    <div style="display: grid; gap: 0.75rem;">
         {% for v in vehicles %}
-            <div style="padding: 1rem; border: 1px solid var(--border); border-radius: 8px;" id="vehicle-{{ v.id }}">
+            <div class="fade-in" style="padding: 1rem; background: var(--surface-hover); border: 1px solid var(--border); border-radius: var(--radius-sm); transition: all 0.2s ease;" id="vehicle-{{ v.id }}">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <strong>{{ v.make }} {{ v.model }}</strong> 
-                        <span style="color: var(--text-muted); font-size: 0.8rem;">{{ v.registration }}</span>
+                        <div style="font-weight: 600; color: var(--text);">{{ v.make }} {{ v.model }}</div>
+                        <div style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem;">{{ v.registration }}</div>
                     </div>
-                    <button class="btn btn-outline" 
-                            style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-color: var(--error); color: var(--error);"
+                    <button class="btn btn-outline btn-small btn-danger" 
                             hx-delete="/htmx/vehicles/{{ v.id }}"
                             hx-target="#vehicle-{{ v.id }}"
                             hx-swap="outerHTML"
