@@ -1,0 +1,134 @@
+{% extends "layout.html" %}
+
+{% block title %}Fuel Log - Deesl{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+    <h1>📋 Fuel Log</h1>
+    <a href="/fuel-entries/new" class="btn">➕ Add Entry</a>
+</div>
+
+<!-- Filters -->
+<div class="card fade-in" style="margin-bottom: 2rem;">
+    <div class="card-header">
+        <div class="card-title">Filters</div>
+    </div>
+    <form method="get" action="/fuel-entries" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="vehicle_id">Vehicle</label>
+            <select id="vehicle_id" name="vehicle_id">
+                <option value="">All Vehicles</option>
+                {% for vehicle in vehicles %}
+                <option value="{{ vehicle.id }}">{{ vehicle.make }} {{ vehicle.model }} ({{ vehicle.registration }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="station_id">Station</label>
+            <select id="station_id" name="station_id">
+                <option value="">All Stations</option>
+                {% for station in stations %}
+                <option value="{{ station.id }}">{{ station.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="date_from">From Date</label>
+            <input type="date" id="date_from" name="date_from" value="{{ filter_date_from }}">
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="date_to">To Date</label>
+            <input type="date" id="date_to" name="date_to" value="{{ filter_date_to }}">
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 0; display: flex; align-items: flex-end; gap: 0.5rem;">
+            <button type="submit" class="btn">Apply Filters</button>
+            <a href="/fuel-entries" class="btn btn-outline">Clear</a>
+        </div>
+    </form>
+</div>
+
+<!-- Summary -->
+{% if !entries.is_empty() %}
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="card" style="text-align: center; margin-bottom: 0;">
+        <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary);">{{ total_entries }}</div>
+        <div style="color: var(--text-muted); font-size: 0.875rem;">Entries</div>
+    </div>
+    <div class="card" style="text-align: center; margin-bottom: 0;">
+        <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary);">{{ "{:.1}"|format(total_litres) }} L</div>
+        <div style="color: var(--text-muted); font-size: 0.875rem;">Total Fuel</div>
+    </div>
+    <div class="card" style="text-align: center; margin-bottom: 0;">
+        <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary);">€{{ "{:.2}"|format(total_cost) }}</div>
+        <div style="color: var(--text-muted); font-size: 0.875rem;">Total Cost</div>
+    </div>
+    <div class="card" style="text-align: center; margin-bottom: 0;">
+        <div style="font-size: 1.5rem; font-weight: 700; color: var(--success);">
+            {% if total_litres > 0.0 %}€{{ "{:.3}"|format(total_cost / total_litres) }}{% else %}-{% endif %}
+        </div>
+        <div style="color: var(--text-muted); font-size: 0.875rem;">Avg €/L</div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Fuel Entries Table -->
+<div class="card fade-in">
+    <div class="card-header">
+        <div class="card-title">Fuel Entries</div>
+    </div>
+    
+    {% if entries.is_empty() %}
+        <div class="empty-state">
+            <div class="empty-state-icon">⛽</div>
+            <p>No fuel entries found matching your filters.</p>
+            <a href="/fuel-entries" class="btn btn-outline" style="margin-top: 1rem;">Clear Filters</a>
+        </div>
+    {% else %}
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Vehicle</th>
+                        <th>Station</th>
+                        <th>Mileage</th>
+                        <th>Litres</th>
+                        <th>Cost</th>
+                        <th>€/L</th>
+                        <th style="text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for (entry, vehicle, station) in entries %}
+                    <tr id="entry-{{ entry.id }}">
+                        <td>{{ entry.filled_at.format("%Y-%m-%d %H:%M") }}</td>
+                        <td>
+                            <div style="font-weight: 500;">{{ vehicle.make }} {{ vehicle.model }}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">{{ vehicle.registration }}</div>
+                        </td>
+                        <td>
+                            {% if station.is_some() %}
+                                {{ station.as_ref().unwrap().name }}
+                            {% else %}
+                                <span style="color: var(--text-muted); font-style: italic;">Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ entry.mileage_km }} km</td>
+                        <td>{{ "{:.2}"|format(entry.litres) }} L</td>
+                        <td>€{{ "{:.2}"|format(entry.cost) }}</td>
+                        <td>€{{ "{:.3}"|format(entry.cost / entry.litres) }}</td>
+                        <td style="text-align: right;">
+                            <a href="/fuel-entries/{{ entry.id }}/edit" class="btn btn-small btn-outline">Edit</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

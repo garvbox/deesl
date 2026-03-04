@@ -1848,6 +1848,139 @@ pub async fn delete_station(
     Ok(Html(""))
 }
 
+#[derive(Template)]
+#[template(path = "fuel_entries.html")]
+pub struct FuelEntriesTemplate {
+    pub logged_in: bool,
+    pub entries: Vec<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)>,
+    pub vehicles: Vec<Vehicle>,
+    pub stations: Vec<FuelStation>,
+    pub filter_vehicle_id: Option<i32>,
+    pub filter_station_id: Option<i32>,
+    pub filter_date_from: String,
+    pub filter_date_to: String,
+    pub total_entries: usize,
+    pub total_litres: f64,
+    pub total_cost: f64,
+}
+
+pub async fn fuel_entries_page(
+    State(pool): State<Pool>,
+    AuthUserRedirect(user): AuthUserRedirect,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = user.user_id;
+
+    // Parse filter parameters
+    let filter_vehicle_id = params.get("vehicle_id").and_then(|v| v.parse::<i32>().ok());
+    let filter_station_id = params.get("station_id").and_then(|v| v.parse::<i32>().ok());
+    let filter_date_from = params.get("date_from").cloned().unwrap_or_default();
+    let filter_date_to = params.get("date_to").cloned().unwrap_or_default();
+
+    // Fetch all vehicles for the user (for filter dropdown)
+    let vehicles: Vec<Vehicle> = conn
+        .interact(move |conn| {
+            vehicles::table
+                .filter(vehicles::owner_id.eq(user_id))
+                .order(vehicles::registration)
+                .load::<Vehicle>(conn)
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Fetch all stations for the user (for filter dropdown)
+    let stations: Vec<FuelStation> = conn
+        .interact(move |conn| {
+            fuel_stations::table
+                .filter(
+                    fuel_stations::user_id
+                        .eq(user_id)
+                        .or(fuel_stations::user_id.is_null()),
+                )
+                .order(fuel_stations::name)
+                .load::<FuelStation>(conn)
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Clone date filters for the closure
+    let filter_date_from_clone = filter_date_from.clone();
+    let filter_date_to_clone = filter_date_to.clone();
+
+    // Fetch fuel entries with filters
+    let entries: Vec<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)> = conn
+        .interact(move |conn| {
+            let mut query = crate::schema::fuel_entries::table
+                .inner_join(vehicles::table)
+                .left_join(crate::schema::fuel_stations::table)
+                .filter(vehicles::owner_id.eq(user_id))
+                .into_boxed();
+
+            // Apply vehicle filter
+            if let Some(vid) = filter_vehicle_id {
+                query = query.filter(crate::schema::fuel_entries::vehicle_id.eq(vid));
+            }
+
+            // Apply station filter
+            if let Some(sid) = filter_station_id {
+                query = query.filter(crate::schema::fuel_entries::station_id.eq(sid));
+            }
+
+            // Apply date filters
+            if !filter_date_from_clone.is_empty()
+                && let Ok(date) =
+                    chrono::NaiveDate::parse_from_str(&filter_date_from_clone, "%Y-%m-%d")
+            {
+                let datetime = date.and_hms_opt(0, 0, 0).unwrap();
+                query = query.filter(crate::schema::fuel_entries::filled_at.ge(datetime));
+            }
+
+            if !filter_date_to_clone.is_empty()
+                && let Ok(date) =
+                    chrono::NaiveDate::parse_from_str(&filter_date_to_clone, "%Y-%m-%d")
+            {
+                let datetime = date.and_hms_opt(23, 59, 59).unwrap();
+                query = query.filter(crate::schema::fuel_entries::filled_at.le(datetime));
+            }
+
+            query
+                .order(crate::schema::fuel_entries::filled_at.desc())
+                .select((
+                    crate::models::FuelEntry::as_select(),
+                    Vehicle::as_select(),
+                    Option::<FuelStation>::as_select(),
+                ))
+                .load::<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)>(conn)
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Calculate totals
+    let total_entries = entries.len();
+    let total_litres: f64 = entries.iter().map(|(e, _, _)| e.litres).sum();
+    let total_cost: f64 = entries.iter().map(|(e, _, _)| e.cost).sum();
+
+    let template = FuelEntriesTemplate {
+        logged_in: true,
+        entries,
+        vehicles,
+        stations,
+        filter_vehicle_id,
+        filter_station_id,
+        filter_date_from,
+        filter_date_to,
+        total_entries,
+        total_litres,
+        total_cost,
+    };
+
+    Ok(Html(template.render().map_err(internal_error)?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
