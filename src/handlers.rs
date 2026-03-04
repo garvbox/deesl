@@ -497,6 +497,183 @@ pub async fn dashboard(AuthUserRedirect(user): AuthUserRedirect) -> impl IntoRes
 }
 
 #[derive(Template)]
+#[template(path = "stats.html")]
+pub struct StatsTemplate {
+    pub logged_in: bool,
+    pub has_data: bool,
+    pub total_entries: usize,
+    pub total_litres: f64,
+    pub total_cost: f64,
+    pub avg_efficiency: f64,
+    pub avg_cost_per_km: f64,
+    pub labels: Vec<String>,
+    pub efficiency_data: Vec<f64>,
+    pub cost_per_km_data: Vec<f64>,
+    pub vehicle_stats: Vec<VehicleStat>,
+}
+
+#[derive(Serialize)]
+pub struct VehicleStat {
+    pub registration: String,
+    pub make: String,
+    pub model: String,
+    pub total_entries: i64,
+    pub total_km: f64,
+    pub total_litres: f64,
+    pub avg_efficiency: f64,
+    pub total_cost: f64,
+}
+
+pub async fn stats_page(
+    State(pool): State<Pool>,
+    AuthUserRedirect(user): AuthUserRedirect,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = user.user_id;
+
+    // Get all fuel entries for the user's vehicles with vehicle and station info
+    let entries: Vec<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)> = conn
+        .interact(move |conn| {
+            crate::schema::fuel_entries::table
+                .inner_join(vehicles::table)
+                .left_join(crate::schema::fuel_stations::table)
+                .filter(vehicles::owner_id.eq(user_id))
+                .order(crate::schema::fuel_entries::filled_at.asc())
+                .select((
+                    crate::models::FuelEntry::as_select(),
+                    Vehicle::as_select(),
+                    Option::<FuelStation>::as_select(),
+                ))
+                .load::<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)>(conn)
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if entries.is_empty() {
+        let template = StatsTemplate {
+            logged_in: true,
+            has_data: false,
+            total_entries: 0,
+            total_litres: 0.0,
+            total_cost: 0.0,
+            avg_efficiency: 0.0,
+            avg_cost_per_km: 0.0,
+            labels: vec![],
+            efficiency_data: vec![],
+            cost_per_km_data: vec![],
+            vehicle_stats: vec![],
+        };
+        return Ok(Html(template.render().map_err(internal_error)?));
+    }
+
+    // Calculate overall stats
+    let total_entries = entries.len();
+    let total_litres: f64 = entries.iter().map(|(e, _, _)| e.litres).sum();
+    let total_cost: f64 = entries.iter().map(|(e, _, _)| e.cost).sum();
+
+    // Group entries by vehicle for efficiency calculations
+    let mut vehicle_data: HashMap<
+        i32,
+        Vec<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)>,
+    > = HashMap::new();
+    for (entry, vehicle, station) in entries {
+        vehicle_data
+            .entry(vehicle.id)
+            .or_default()
+            .push((entry, vehicle.clone(), station));
+    }
+
+    // Calculate vehicle stats and chart data
+    let mut vehicle_stats = Vec::new();
+    let mut chart_entries: Vec<(String, f64, f64)> = Vec::new(); // (date, efficiency, cost_per_km)
+
+    for (_, vehicle_entries) in vehicle_data.iter() {
+        let vehicle = &vehicle_entries[0].1;
+        let mut total_km = 0.0;
+        let mut vehicle_litres = 0.0;
+        let mut vehicle_cost = 0.0;
+        let mut prev_mileage: Option<i32> = None;
+        let mut efficiency_sum = 0.0;
+        let mut efficiency_count = 0;
+
+        for (entry, _, _) in vehicle_entries.iter() {
+            vehicle_litres += entry.litres;
+            vehicle_cost += entry.cost;
+
+            if let Some(prev) = prev_mileage {
+                let km = (entry.mileage_km - prev) as f64;
+                if km > 0.0 && entry.litres > 0.0 {
+                    let efficiency = km / entry.litres; // km per litre
+                    let cost_per_km = entry.cost / km;
+                    efficiency_sum += efficiency;
+                    efficiency_count += 1;
+                    total_km += km;
+
+                    let date_label = entry.filled_at.format("%Y-%m-%d").to_string();
+                    chart_entries.push((date_label, efficiency, cost_per_km));
+                }
+            }
+            prev_mileage = Some(entry.mileage_km);
+        }
+
+        let avg_efficiency = if efficiency_count > 0 {
+            efficiency_sum / efficiency_count as f64
+        } else {
+            0.0
+        };
+
+        vehicle_stats.push(VehicleStat {
+            registration: vehicle.registration.clone(),
+            make: vehicle.make.clone(),
+            model: vehicle.model.clone(),
+            total_entries: vehicle_entries.len() as i64,
+            total_km,
+            total_litres: vehicle_litres,
+            avg_efficiency,
+            total_cost: vehicle_cost,
+        });
+    }
+
+    // Sort chart entries by date and take last 20
+    chart_entries.sort_by(|a, b| a.0.cmp(&b.0));
+    let chart_entries: Vec<_> = chart_entries.into_iter().rev().take(20).collect();
+
+    let labels: Vec<String> = chart_entries.iter().map(|(d, _, _)| d.clone()).collect();
+    let efficiency_data: Vec<f64> = chart_entries.iter().map(|(_, e, _)| *e).collect();
+    let cost_per_km_data: Vec<f64> = chart_entries.iter().map(|(_, _, c)| *c).collect();
+
+    // Calculate averages
+    let avg_efficiency = if !efficiency_data.is_empty() {
+        efficiency_data.iter().sum::<f64>() / efficiency_data.len() as f64
+    } else {
+        0.0
+    };
+
+    let avg_cost_per_km = if !cost_per_km_data.is_empty() {
+        cost_per_km_data.iter().sum::<f64>() / cost_per_km_data.len() as f64
+    } else {
+        0.0
+    };
+
+    let template = StatsTemplate {
+        logged_in: true,
+        has_data: true,
+        total_entries,
+        total_litres,
+        total_cost,
+        avg_efficiency,
+        avg_cost_per_km,
+        labels,
+        efficiency_data,
+        cost_per_km_data,
+        vehicle_stats,
+    };
+
+    Ok(Html(template.render().map_err(internal_error)?))
+}
+
+#[derive(Template)]
 #[template(path = "settings.html")]
 pub struct SettingsTemplate {
     pub logged_in: bool,
@@ -784,6 +961,48 @@ pub async fn htmx_delete_vehicle(
             vehicles::table
                 .filter(vehicles::id.eq(id))
                 .filter(vehicles::owner_id.eq(user_id)),
+        )
+        .execute(conn)
+    })
+    .await
+    .map_err(internal_error)?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Html(""))
+}
+
+pub async fn htmx_delete_fuel_entry(
+    State(pool): State<Pool>,
+    user: AuthUser,
+    axum::extract::Path(id): axum::extract::Path<i32>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = user.user_id;
+
+    // First check if entry exists and user owns the vehicle
+    let is_owner: bool = conn
+        .interact(move |conn| {
+            crate::schema::fuel_entries::table
+                .inner_join(vehicles::table)
+                .filter(crate::schema::fuel_entries::id.eq(id))
+                .filter(vehicles::owner_id.eq(user_id))
+                .select(crate::schema::fuel_entries::id)
+                .first::<i32>(conn)
+                .optional()
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .is_some();
+
+    if !is_owner {
+        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+    }
+
+    // Delete the entry
+    conn.interact(move |conn| {
+        diesel::delete(
+            crate::schema::fuel_entries::table.filter(crate::schema::fuel_entries::id.eq(id)),
         )
         .execute(conn)
     })
@@ -1259,9 +1478,28 @@ pub async fn htmx_import_execute(
 
     // Build mappings from form data
     let mut actual_mappings: HashMap<String, String> = HashMap::new();
+    let mut used_targets: HashMap<String, String> = HashMap::new(); // target -> column
     let mut i = 0;
     while let Some(col_name) = payload.get(&format!("col_{}", i)) {
         if let Some(target_field) = payload.get(&format!("map_{}", i)).filter(|s| !s.is_empty()) {
+            // Check if this target is already mapped to a different column
+            if let Some(existing_col) = used_targets.get(target_field)
+                && existing_col != col_name
+            {
+                let template = ImportResultTemplate {
+                    success: false,
+                    imported: 0,
+                    skipped: 0,
+                    stations_created: 0,
+                    total_errors: 1,
+                    errors: vec![format!(
+                        "Field '{}' is mapped multiple times: '{}' and '{}'",
+                        target_field, existing_col, col_name
+                    )],
+                };
+                return Ok(Html(template.render().map_err(internal_error)?));
+            }
+            used_targets.insert(target_field.clone(), col_name.clone());
             actual_mappings.insert(target_field.clone(), col_name.clone());
         }
         i += 1;
