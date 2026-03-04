@@ -89,6 +89,16 @@ pub struct NewFuelEntry {
     pub filled_at: Option<NaiveDateTime>,
 }
 
+#[derive(AsChangeset, serde::Deserialize)]
+#[diesel(table_name = crate::schema::fuel_entries)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct UpdateFuelEntry {
+    pub mileage_km: Option<i32>,
+    pub litres: Option<f64>,
+    pub cost: Option<f64>,
+    pub filled_at: Option<NaiveDateTime>,
+}
+
 #[derive(Queryable, Selectable, serde::Serialize)]
 #[diesel(table_name = crate::schema::vehicle_shares)]
 #[diesel(check_for_backend(diesel::pg::Pg))]

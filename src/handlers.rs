@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::auth::{AuthUser, AuthUserRedirect};
-use crate::models::{FuelStation, NewFuelStation, NewVehicle, User, Vehicle};
+use crate::models::{FuelEntry, FuelStation, NewFuelStation, NewVehicle, User, Vehicle};
 use crate::schema::{fuel_stations, users, vehicles};
 
 /// Utility function for mapping any error into a `500 Internal Server Error`
@@ -817,6 +817,110 @@ pub async fn htmx_recent_entries(
 
     let template = RecentEntriesTemplate { entries };
     Ok(Html(template.render().map_err(internal_error)?))
+}
+
+#[derive(Template)]
+#[template(path = "edit_fuel_entry.html")]
+pub struct EditFuelEntryTemplate {
+    pub logged_in: bool,
+    pub entry: FuelEntry,
+    pub vehicle: Vehicle,
+    pub filled_at_formatted: String,
+}
+
+pub async fn edit_fuel_entry(
+    State(pool): State<Pool>,
+    AuthUserRedirect(user): AuthUserRedirect,
+    axum::extract::Path(entry_id): axum::extract::Path<i32>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = user.user_id;
+
+    let result: Option<(FuelEntry, Vehicle)> = conn
+        .interact(move |conn| {
+            crate::schema::fuel_entries::table
+                .inner_join(vehicles::table)
+                .filter(crate::schema::fuel_entries::id.eq(entry_id))
+                .filter(vehicles::owner_id.eq(user_id))
+                .select((FuelEntry::as_select(), Vehicle::as_select()))
+                .first::<(FuelEntry, Vehicle)>(conn)
+                .optional()
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let (entry, vehicle) = result.ok_or((StatusCode::NOT_FOUND, "Entry not found".to_string()))?;
+
+    let filled_at_formatted = entry.filled_at.format("%Y-%m-%dT%H:%M").to_string();
+
+    let template = EditFuelEntryTemplate {
+        logged_in: true,
+        entry,
+        vehicle,
+        filled_at_formatted,
+    };
+    Ok(Html(template.render().map_err(internal_error)?))
+}
+
+#[derive(Deserialize)]
+pub struct UpdateFuelEntryForm {
+    pub mileage_km: i32,
+    pub litres: f64,
+    pub cost: f64,
+    pub filled_at: String,
+}
+
+pub async fn update_fuel_entry(
+    State(pool): State<Pool>,
+    user: AuthUser,
+    axum::extract::Path(entry_id): axum::extract::Path<i32>,
+    Form(payload): Form<UpdateFuelEntryForm>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = user.user_id;
+
+    let is_owner: bool = conn
+        .interact(move |conn| {
+            crate::schema::fuel_entries::table
+                .inner_join(vehicles::table)
+                .filter(crate::schema::fuel_entries::id.eq(entry_id))
+                .filter(vehicles::owner_id.eq(user_id))
+                .select(crate::schema::fuel_entries::id)
+                .first::<i32>(conn)
+                .optional()
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .is_some();
+
+    if !is_owner {
+        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+    }
+
+    let filled_at = chrono::NaiveDateTime::parse_from_str(&payload.filled_at, "%Y-%m-%dT%H:%M")
+        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid date format".to_string()))?;
+
+    conn.interact(move |conn| {
+        diesel::update(
+            crate::schema::fuel_entries::table.filter(crate::schema::fuel_entries::id.eq(entry_id)),
+        )
+        .set(crate::models::UpdateFuelEntry {
+            mileage_km: Some(payload.mileage_km),
+            litres: Some(payload.litres),
+            cost: Some(payload.cost),
+            filled_at: Some(filled_at),
+        })
+        .execute(conn)
+    })
+    .await
+    .map_err(internal_error)?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert("HX-Redirect", "/dashboard".parse().unwrap());
+    Ok((headers, Redirect::to("/dashboard")))
 }
 
 #[derive(Template)]
