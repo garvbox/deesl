@@ -797,7 +797,7 @@ pub async fn htmx_delete_vehicle(
 #[derive(Template)]
 #[template(path = "fragments/recent_entries.html")]
 pub struct RecentEntriesTemplate {
-    pub entries: Vec<(crate::models::FuelEntry, Vehicle)>,
+    pub entries: Vec<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)>,
 }
 
 impl RecentEntriesTemplate {
@@ -813,15 +813,20 @@ pub async fn htmx_recent_entries(
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
-    let entries: Vec<(crate::models::FuelEntry, Vehicle)> = conn
+    let entries: Vec<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)> = conn
         .interact(move |conn| {
             crate::schema::fuel_entries::table
                 .inner_join(vehicles::table)
+                .left_join(crate::schema::fuel_stations::table)
                 .filter(vehicles::owner_id.eq(user_id))
                 .order(crate::schema::fuel_entries::filled_at.desc())
                 .limit(5)
-                .select((crate::models::FuelEntry::as_select(), Vehicle::as_select()))
-                .load::<(crate::models::FuelEntry, Vehicle)>(conn)
+                .select((
+                    crate::models::FuelEntry::as_select(),
+                    Vehicle::as_select(),
+                    Option::<FuelStation>::as_select(),
+                ))
+                .load::<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)>(conn)
         })
         .await
         .map_err(internal_error)?

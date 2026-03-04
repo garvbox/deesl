@@ -10,16 +10,24 @@
                 <tr>
                     <th>Date</th>
                     <th>Vehicle</th>
+                    <th>Station</th>
                     <th>Litres</th>
                     <th>Cost</th>
                     <th style="text-align: right;">Actions</th>
                 </tr>
             </thead>
             <tbody>
-                {% for (e, v) in entries %}
+                {% for (e, v, s) in entries %}
                 <tr>
                     <td>{{ e.filled_at.format("%Y-%m-%d") }}</td>
                     <td>{{ v.registration }}</td>
+                    <td>
+                        {% if s.is_some() %}
+                            {{ s.as_ref().unwrap().name }}
+                        {% else %}
+                            <span style="color: var(--text-muted); font-style: italic;">Unknown</span>
+                        {% endif %}
+                    </td>
                     <td>{{ self.format_float(e.litres) }} L</td>
                     <td>€{{ self.format_float(e.cost) }}</td>
                     <td style="text-align: right;">
