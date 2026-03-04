@@ -3,8 +3,17 @@
 {% block title %}Usage Stats - Deesl{% endblock %}
 
 {% block content %}
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
     <h1>📊 Usage Statistics</h1>
+    
+    <!-- Time Period Controls -->
+    <div style="display: flex; gap: 0.5rem;">
+        <a href="/stats?period=7d" class="btn btn-small {% if period == "7d" %}btn-outline{% endif %}">7 Days</a>
+        <a href="/stats?period=30d" class="btn btn-small {% if period == "30d" %}btn-outline{% endif %}">30 Days</a>
+        <a href="/stats?period=90d" class="btn btn-small {% if period == "90d" %}btn-outline{% endif %}">90 Days</a>
+        <a href="/stats?period=1y" class="btn btn-small {% if period == "1y" %}btn-outline{% endif %}">1 Year</a>
+        <a href="/stats?period=all" class="btn btn-small {% if period == "all" || period == "" %}btn-outline{% endif %}">All Time</a>
+    </div>
 </div>
 
 {% if !has_data %}

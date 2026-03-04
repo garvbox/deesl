@@ -501,6 +501,7 @@ pub async fn dashboard(AuthUserRedirect(user): AuthUserRedirect) -> impl IntoRes
 pub struct StatsTemplate {
     pub logged_in: bool,
     pub has_data: bool,
+    pub period: String,
     pub total_entries: usize,
     pub total_litres: f64,
     pub total_cost: f64,
@@ -528,17 +529,38 @@ pub struct VehicleStat {
 pub async fn stats_page(
     State(pool): State<Pool>,
     AuthUserRedirect(user): AuthUserRedirect,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
+    // Parse time period (default to "all")
+    let period = params
+        .get("period")
+        .cloned()
+        .unwrap_or_else(|| "all".to_string());
+    let cutoff_date = match period.as_str() {
+        "7d" => Some(chrono::Utc::now().naive_utc() - chrono::Duration::days(7)),
+        "30d" => Some(chrono::Utc::now().naive_utc() - chrono::Duration::days(30)),
+        "90d" => Some(chrono::Utc::now().naive_utc() - chrono::Duration::days(90)),
+        "1y" => Some(chrono::Utc::now().naive_utc() - chrono::Duration::days(365)),
+        _ => None, // "all" or invalid
+    };
+
     // Get all fuel entries for the user's vehicles with vehicle and station info
     let entries: Vec<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)> = conn
         .interact(move |conn| {
-            crate::schema::fuel_entries::table
+            let mut query = crate::schema::fuel_entries::table
                 .inner_join(vehicles::table)
                 .left_join(crate::schema::fuel_stations::table)
                 .filter(vehicles::owner_id.eq(user_id))
+                .into_boxed();
+
+            if let Some(cutoff) = cutoff_date {
+                query = query.filter(crate::schema::fuel_entries::filled_at.gt(cutoff));
+            }
+
+            query
                 .order(crate::schema::fuel_entries::filled_at.asc())
                 .select((
                     crate::models::FuelEntry::as_select(),
@@ -555,6 +577,7 @@ pub async fn stats_page(
         let template = StatsTemplate {
             logged_in: true,
             has_data: false,
+            period: period.clone(),
             total_entries: 0,
             total_litres: 0.0,
             total_cost: 0.0,
@@ -566,6 +589,7 @@ pub async fn stats_page(
             cost_per_litre_data: vec![],
             vehicle_stats: vec![],
         };
+
         return Ok(Html(template.render().map_err(internal_error)?));
     }
 
@@ -663,6 +687,7 @@ pub async fn stats_page(
     let template = StatsTemplate {
         logged_in: true,
         has_data: true,
+        period: period.clone(),
         total_entries,
         total_litres,
         total_cost,
