@@ -18,7 +18,7 @@
             </thead>
             <tbody>
                 {% for (e, v, s) in entries %}
-                <tr>
+                <tr id="entry-{{ e.id }}">
                     <td>{{ e.filled_at.format("%Y-%m-%d") }}</td>
                     <td>{{ v.registration }}</td>
                     <td>

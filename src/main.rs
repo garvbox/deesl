@@ -141,12 +141,17 @@ async fn main() {
         )
         .route("/stations/{id}", post(handlers::update_station))
         .route("/stations/{id}", delete(handlers::delete_station))
+        .route("/stats", get(handlers::stats_page))
         .route("/import", get(handlers::import_page))
         .route("/htmx/import/preview", post(handlers::htmx_import_preview))
         .route("/htmx/import/execute", post(handlers::htmx_import_execute))
         .route("/htmx/vehicles", get(handlers::htmx_vehicles))
         .route("/htmx/vehicles/{id}", delete(handlers::htmx_delete_vehicle))
         .route("/htmx/entries/recent", get(handlers::htmx_recent_entries))
+        .route(
+            "/htmx/entries/{id}",
+            delete(handlers::htmx_delete_fuel_entry),
+        )
         .route("/htmx/stations/search", get(handlers::htmx_station_search))
         .route("/api/version", get(serve_version))
         .merge(oauth_handlers::router())
@@ -173,6 +178,7 @@ fn build_security_headers() -> SecurityHeadersLayer {
                     "'self'",
                     "'unsafe-inline'",
                     "https://unpkg.com/htmx.org@2.0.0/dist/htmx.min.js",
+                    "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js",
                 ])
                 .style_src(vec!["'self'", "'unsafe-inline'"])
                 .img_src(vec!["'self'", "data:", "https://*.googleusercontent.com"])
