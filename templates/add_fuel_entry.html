@@ -6,7 +6,7 @@
 <div class="card" style="max-width: 500px; margin: 0 auto;">
     <h1>Add Fuel Entry</h1>
     
-    <form hx-post="/fuel-entries" hx-target="#entry-result" class="add-entry-form">
+    <form action="/fuel-entries" method="post" class="add-entry-form">
         <label>
             Vehicle
             <select name="vehicle_id" required>
@@ -40,8 +40,6 @@
             <button type="submit">Save Entry</button>
             <a href="/dashboard" class="btn btn-outline">Cancel</a>
         </div>
-        
-        <div id="entry-result"></div>
     </form>
 </div>
 {% endblock %}
