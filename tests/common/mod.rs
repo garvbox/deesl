@@ -82,6 +82,7 @@ pub async fn create_test_app(pool: Pool) -> Router {
         .route("/htmx/vehicles", get(handlers::htmx_vehicles))
         .route("/htmx/vehicles/{id}", delete(handlers::htmx_delete_vehicle))
         .route("/htmx/entries/recent", get(handlers::htmx_recent_entries))
+        .route("/htmx/stations/search", get(handlers::htmx_station_search))
         .merge(oauth_handlers::router())
         .layer(TraceLayer::new_for_http())
         .with_state(app_state)

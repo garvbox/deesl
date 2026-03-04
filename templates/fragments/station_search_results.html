@@ -1,0 +1,30 @@
+{% if stations.is_empty() %}
+    <div style="padding: 0.75rem; color: var(--text-muted); font-size: 0.875rem;">
+        No stations found matching "{{ query }}"
+    </div>
+{% else %}
+    {% for station in stations %}
+        <div class="station-result" 
+             style="padding: 0.75rem; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.15s ease;"
+             onmouseover="this.style.background='var(--surface-hover)'"
+             onmouseout="this.style.background='transparent'"
+             onclick="selectStation('{{ station.id }}', '{{ station.name }}')">
+            <div style="font-weight: 500; color: var(--text);">{{ station.name }}</div>
+            {% if station.user_id.is_none() %}
+                <div style="font-size: 0.75rem; color: var(--text-muted);">System station</div>
+            {% endif %}
+        </div>
+    {% endfor %}
+{% endif %}
+
+<script>
+function selectStation(id, name) {
+    const hiddenInput = document.getElementById('station_id');
+    const textInput = document.getElementById('station_search');
+    const results = document.getElementById('station_results');
+    
+    if (hiddenInput) hiddenInput.value = id;
+    if (textInput) textInput.value = name;
+    if (results) results.innerHTML = '';
+}
+</script>

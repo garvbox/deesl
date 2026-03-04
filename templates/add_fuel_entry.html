@@ -18,13 +18,24 @@
             </select>
         </div>
 
-        <div class="form-group">
-            <label for="station">Station</label>
-            <select id="station" name="station_id" required>
-                {% for station in stations %}
-                <option value="{{ station.id }}">{{ station.name }}</option>
-                {% endfor %}
-            </select>
+        <div class="form-group" style="position: relative;">
+            <label for="station_search">Station</label>
+            <input type="hidden" id="station_id" name="station_id" required>
+            <input type="text" 
+                   id="station_search" 
+                   name="q"
+                   placeholder="Type to search stations..." 
+                   autocomplete="off"
+                   hx-get="/htmx/stations/search"
+                   hx-trigger="keyup changed delay:200ms, focus"
+                   hx-target="#station_results"
+                   hx-indicator="#station-spinner"
+                   style="width: 100%;"
+                   oninput="document.getElementById('station_id').value = ''">
+            <div id="station-spinner" class="htmx-indicator spinner" style="position: absolute; right: 0.75rem; top: 2.25rem;"></div>
+            <div id="station_results" 
+                 style="position: absolute; top: 100%; left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow); z-index: 100; max-height: 200px; overflow-y: auto;">
+            </div>
         </div>
 
         <div class="form-group">
@@ -53,4 +64,15 @@
         </div>
     </form>
 </div>
+
+<script>
+// Close station results when clicking outside
+document.addEventListener('click', function(e) {
+    const container = document.querySelector('.form-group[style*="position: relative"]');
+    const results = document.getElementById('station_results');
+    if (container && results && !container.contains(e.target)) {
+        results.innerHTML = '';
+    }
+});
+</script>
 {% endblock %}
