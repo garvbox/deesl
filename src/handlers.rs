@@ -509,6 +509,7 @@ pub struct StatsTemplate {
     pub labels: Vec<String>,
     pub efficiency_data: Vec<f64>,
     pub cost_per_km_data: Vec<f64>,
+    pub cost_per_litre_data: Vec<f64>,
     pub vehicle_stats: Vec<VehicleStat>,
 }
 
@@ -562,6 +563,7 @@ pub async fn stats_page(
             labels: vec![],
             efficiency_data: vec![],
             cost_per_km_data: vec![],
+            cost_per_litre_data: vec![],
             vehicle_stats: vec![],
         };
         return Ok(Html(template.render().map_err(internal_error)?));
@@ -586,7 +588,7 @@ pub async fn stats_page(
 
     // Calculate vehicle stats and chart data
     let mut vehicle_stats = Vec::new();
-    let mut chart_entries: Vec<(String, f64, f64)> = Vec::new(); // (date, efficiency, cost_per_km)
+    let mut chart_entries: Vec<(String, f64, f64, f64)> = Vec::new(); // (date, efficiency, cost_per_km, cost_per_litre)
 
     for (_, vehicle_entries) in vehicle_data.iter() {
         let vehicle = &vehicle_entries[0].1;
@@ -606,12 +608,13 @@ pub async fn stats_page(
                 if km > 0.0 && entry.litres > 0.0 {
                     let efficiency = km / entry.litres; // km per litre
                     let cost_per_km = entry.cost / km;
+                    let cost_per_litre = entry.cost / entry.litres;
                     efficiency_sum += efficiency;
                     efficiency_count += 1;
                     total_km += km;
 
                     let date_label = entry.filled_at.format("%Y-%m-%d").to_string();
-                    chart_entries.push((date_label, efficiency, cost_per_km));
+                    chart_entries.push((date_label, efficiency, cost_per_km, cost_per_litre));
                 }
             }
             prev_mileage = Some(entry.mileage_km);
@@ -639,9 +642,10 @@ pub async fn stats_page(
     chart_entries.sort_by(|a, b| a.0.cmp(&b.0));
     let chart_entries: Vec<_> = chart_entries.into_iter().rev().take(20).collect();
 
-    let labels: Vec<String> = chart_entries.iter().map(|(d, _, _)| d.clone()).collect();
-    let efficiency_data: Vec<f64> = chart_entries.iter().map(|(_, e, _)| *e).collect();
-    let cost_per_km_data: Vec<f64> = chart_entries.iter().map(|(_, _, c)| *c).collect();
+    let labels: Vec<String> = chart_entries.iter().map(|(d, _, _, _)| d.clone()).collect();
+    let efficiency_data: Vec<f64> = chart_entries.iter().map(|(_, e, _, _)| *e).collect();
+    let cost_per_km_data: Vec<f64> = chart_entries.iter().map(|(_, _, c, _)| *c).collect();
+    let cost_per_litre_data: Vec<f64> = chart_entries.iter().map(|(_, _, _, l)| *l).collect();
 
     // Calculate averages
     let avg_efficiency = if !efficiency_data.is_empty() {
@@ -667,6 +671,7 @@ pub async fn stats_page(
         labels,
         efficiency_data,
         cost_per_km_data,
+        cost_per_litre_data,
         vehicle_stats,
     };
 

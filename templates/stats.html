@@ -57,17 +57,24 @@
         </div>
     </div>
 
+    <div class="card fade-in">
+        <div class="card-header">
+            <div class="card-title">Cost Per Litre Over Time</div>
+        </div>
+        <div style="position: relative; height: 300px;">
+            <canvas id="costPerLitreChart"></canvas>
+        </div>
+    </div>
+
     <script>
-        console.log('Chart data:', {{ labels|json }}, {{ efficiency_data|json }}, {{ cost_per_km_data|json }});
-        
         const efficiencyCtx = document.getElementById('efficiencyChart').getContext('2d');
         new Chart(efficiencyCtx, {
             type: 'line',
             data: {
-                labels: {{ labels|json }},
+                labels: {{ labels|json|safe }},
                 datasets: [{
                     label: 'km per Litre',
-                    data: {{ efficiency_data|json }},
+                    data: {{ efficiency_data|json|safe }},
                     borderColor: 'rgb(16, 185, 129)',
                     backgroundColor: 'rgba(16, 185, 129, 0.1)',
                     tension: 0.4,
@@ -93,10 +100,10 @@
         new Chart(costCtx, {
             type: 'line',
             data: {
-                labels: {{ labels|json }},
+                labels: {{ labels|json|safe }},
                 datasets: [{
                     label: 'Cost per km',
-                    data: {{ cost_per_km_data|json }},
+                    data: {{ cost_per_km_data|json|safe }},
                     borderColor: 'rgb(59, 130, 246)',
                     backgroundColor: 'rgba(59, 130, 246, 0.1)',
                     tension: 0.4,
@@ -113,6 +120,35 @@
                     y: {
                         beginAtZero: true,
                         title: { display: true, text: '€/km' }
+                    }
+                }
+            }
+        });
+
+        const costPerLitreCtx = document.getElementById('costPerLitreChart').getContext('2d');
+        new Chart(costPerLitreCtx, {
+            type: 'line',
+            data: {
+                labels: {{ labels|json|safe }},
+                datasets: [{
+                    label: 'Cost per Litre',
+                    data: {{ cost_per_litre_data|json|safe }},
+                    borderColor: 'rgb(139, 92, 246)',
+                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: '€/L' }
                     }
                 }
             }

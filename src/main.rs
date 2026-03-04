@@ -178,6 +178,7 @@ fn build_security_headers() -> SecurityHeadersLayer {
                     "'self'",
                     "'unsafe-inline'",
                     "https://unpkg.com/htmx.org@2.0.0/dist/htmx.min.js",
+                    "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js",
                 ])
                 .style_src(vec!["'self'", "'unsafe-inline'"])
                 .img_src(vec!["'self'", "data:", "https://*.googleusercontent.com"])
