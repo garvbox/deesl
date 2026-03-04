@@ -47,7 +47,7 @@
     </div>
 
     <!-- Charts -->
-    {% if !efficiency_data.is_empty() %}
+    {% if !efficiency_chart.series.is_empty() %}
     <div class="card fade-in">
         <div class="card-header">
             <div class="card-title">Efficiency Over Time</div>
@@ -76,25 +76,33 @@
     </div>
 
     <script>
+        // Efficiency Chart with multiple series
         const efficiencyCtx = document.getElementById('efficiencyChart').getContext('2d');
         new Chart(efficiencyCtx, {
             type: 'line',
             data: {
-                labels: {{ labels|json|safe }},
-                datasets: [{
-                    label: 'km per Litre',
-                    data: {{ efficiency_data|json|safe }},
-                    borderColor: 'rgb(16, 185, 129)',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                    tension: 0.4,
-                    fill: true
-                }]
+                labels: {{ efficiency_chart.labels|json|safe }},
+                datasets: [
+                    {% for series in efficiency_chart.series %}
+                    {
+                        label: {{ series.label|json|safe }},
+                        data: {{ series.data|json|safe }},
+                        borderColor: {{ series.color|json|safe }},
+                        backgroundColor: {{ series.color|json|safe }},
+                        tension: 0.4,
+                        spanGaps: true
+                    }{% if !loop.last %},{% endif %}
+                    {% endfor %}
+                ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: false }
+                    legend: { 
+                        display: {{ efficiency_chart.series.len() > 1 }}, 
+                        position: 'bottom' 
+                    }
                 },
                 scales: {
                     y: {
@@ -105,25 +113,33 @@
             }
         });
 
+        // Cost Per km Chart with multiple series
         const costCtx = document.getElementById('costChart').getContext('2d');
         new Chart(costCtx, {
             type: 'line',
             data: {
-                labels: {{ labels|json|safe }},
-                datasets: [{
-                    label: 'Cost per km',
-                    data: {{ cost_per_km_data|json|safe }},
-                    borderColor: 'rgb(59, 130, 246)',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    tension: 0.4,
-                    fill: true
-                }]
+                labels: {{ cost_per_km_chart.labels|json|safe }},
+                datasets: [
+                    {% for series in cost_per_km_chart.series %}
+                    {
+                        label: {{ series.label|json|safe }},
+                        data: {{ series.data|json|safe }},
+                        borderColor: {{ series.color|json|safe }},
+                        backgroundColor: {{ series.color|json|safe }},
+                        tension: 0.4,
+                        spanGaps: true
+                    }{% if !loop.last %},{% endif %}
+                    {% endfor %}
+                ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: false }
+                    legend: { 
+                        display: {{ cost_per_km_chart.series.len() > 1 }}, 
+                        position: 'bottom' 
+                    }
                 },
                 scales: {
                     y: {
@@ -134,25 +150,33 @@
             }
         });
 
+        // Cost Per Litre Chart with multiple series
         const costPerLitreCtx = document.getElementById('costPerLitreChart').getContext('2d');
         new Chart(costPerLitreCtx, {
             type: 'line',
             data: {
-                labels: {{ labels|json|safe }},
-                datasets: [{
-                    label: 'Cost per Litre',
-                    data: {{ cost_per_litre_data|json|safe }},
-                    borderColor: 'rgb(139, 92, 246)',
-                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                    tension: 0.4,
-                    fill: true
-                }]
+                labels: {{ cost_per_litre_chart.labels|json|safe }},
+                datasets: [
+                    {% for series in cost_per_litre_chart.series %}
+                    {
+                        label: {{ series.label|json|safe }},
+                        data: {{ series.data|json|safe }},
+                        borderColor: {{ series.color|json|safe }},
+                        backgroundColor: {{ series.color|json|safe }},
+                        tension: 0.4,
+                        spanGaps: true
+                    }{% if !loop.last %},{% endif %}
+                    {% endfor %}
+                ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: false }
+                    legend: { 
+                        display: {{ cost_per_litre_chart.series.len() > 1 }}, 
+                        position: 'bottom' 
+                    }
                 },
                 scales: {
                     y: {
