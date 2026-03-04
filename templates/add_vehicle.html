@@ -3,31 +3,31 @@
 {% block title %}Add Vehicle - Deesl{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width: 500px; margin: 0 auto;">
-    <h1>Add New Vehicle</h1>
+<div class="card fade-in" style="max-width: 500px; margin: 0 auto;">
+    <div class="card-header">
+        <div class="card-title">🚗 Add New Vehicle</div>
+    </div>
     
-    <form hx-post="/vehicles" hx-target="#vehicle-list-redirect" class="add-vehicle-form">
-        <label>
-            Make
-            <input type="text" name="make" placeholder="e.g. BMW" required>
-        </label>
-        
-        <label>
-            Model
-            <input type="text" name="model" placeholder="e.g. 330d" required>
-        </label>
-        
-        <label>
-            Registration
-            <input type="text" name="registration" placeholder="e.g. 241-D-12345" required>
-        </label>
-        
-        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-            <button type="submit">Add Vehicle</button>
-            <a href="/dashboard" class="btn btn-outline">Cancel</a>
+    <form action="/vehicles" method="post">
+        <div class="form-group">
+            <label for="make">Make</label>
+            <input type="text" id="make" name="make" placeholder="e.g. BMW" required>
         </div>
         
-        <div id="vehicle-list-redirect"></div>
+        <div class="form-group">
+            <label for="model">Model</label>
+            <input type="text" id="model" name="model" placeholder="e.g. 330d" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="registration">Registration</label>
+            <input type="text" id="registration" name="registration" placeholder="e.g. 241-D-12345" required>
+        </div>
+        
+        <div style="display: flex; gap: 1rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+            <button type="submit">💾 Add Vehicle</button>
+            <a href="/dashboard" class="btn btn-outline">Cancel</a>
+        </div>
     </form>
 </div>
 {% endblock %}
