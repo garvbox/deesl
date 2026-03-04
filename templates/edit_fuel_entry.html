@@ -10,7 +10,15 @@
         <label>
             Vehicle
             <input type="text" value="{{ vehicle.make }} {{ vehicle.model }} ({{ vehicle.registration }})" disabled>
-            <input type="hidden" name="vehicle_id" value="{{ entry.vehicle_id }}">
+        </label>
+
+        <label>
+            Station
+            <select name="station_id" required>
+                {% for station in stations %}
+                <option value="{{ station.id }}" {% if entry.station_id.is_some() && entry.station_id.unwrap() == station.id %}selected{% endif %}>{{ station.name }}</option>
+                {% endfor %}
+            </select>
         </label>
 
         <label>

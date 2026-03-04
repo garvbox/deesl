@@ -3,8 +3,8 @@ use deadpool_diesel::postgres::{Manager, Pool};
 use diesel::prelude::*;
 
 use deesl::auth::AuthConfig;
-use deesl::models::{NewUser, NewVehicle};
-use deesl::schema::{users, vehicles};
+use deesl::models::{NewFuelStation, NewUser, NewVehicle};
+use deesl::schema::{fuel_stations, users, vehicles};
 
 /// Test user data for creating test fixtures
 #[derive(Clone)]
@@ -54,6 +54,12 @@ pub async fn create_test_app(pool: Pool) -> Router {
         .route("/fuel-entries", post(handlers::create_fuel_entry))
         .route("/fuel-entries/{id}/edit", get(handlers::edit_fuel_entry))
         .route("/fuel-entries/{id}", post(handlers::update_fuel_entry))
+        .route(
+            "/stations",
+            get(handlers::stations_page).post(handlers::create_station),
+        )
+        .route("/stations/{id}", post(handlers::update_station))
+        .route("/stations/{id}", delete(handlers::delete_station))
         .route("/import", get(handlers::import_page))
         .route("/htmx/import/preview", post(handlers::htmx_import_preview))
         .route("/htmx/import/execute", post(handlers::htmx_import_execute))
@@ -164,6 +170,27 @@ pub async fn create_test_vehicle_db(
         .unwrap();
 
     vehicle.id
+}
+
+/// Creates a test fuel station in the database
+pub async fn create_test_station_db(pool: &Pool, user_id: i32, name: &str) -> i32 {
+    let conn = pool.get().await.unwrap();
+    let name = name.to_string();
+
+    let station: deesl::models::FuelStation = conn
+        .interact(move |conn| {
+            diesel::insert_into(fuel_stations::table)
+                .values(NewFuelStation {
+                    name,
+                    user_id: Some(user_id),
+                })
+                .get_result(conn)
+        })
+        .await
+        .unwrap()
+        .unwrap();
+
+    station.id
 }
 
 pub async fn post_import_csv(
