@@ -3,46 +3,48 @@
 {% block title %}Edit Fuel Entry - Deesl{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width: 500px; margin: 0 auto;">
-    <h1>Edit Fuel Entry</h1>
+<div class="card fade-in" style="max-width: 500px; margin: 0 auto;">
+    <div class="card-header">
+        <div class="card-title">✏️ Edit Fuel Entry</div>
+    </div>
     
-    <form action="/fuel-entries/{{ entry.id }}" method="post" class="add-entry-form">
-        <label>
-            Vehicle
-            <input type="text" value="{{ vehicle.make }} {{ vehicle.model }} ({{ vehicle.registration }})" disabled>
-        </label>
+    <form action="/fuel-entries/{{ entry.id }}" method="post">
+        <div class="form-group">
+            <label>Vehicle</label>
+            <input type="text" value="{{ vehicle.make }} {{ vehicle.model }} ({{ vehicle.registration }})" disabled style="background: var(--surface-hover);">
+        </div>
 
-        <label>
-            Station
-            <select name="station_id" required>
+        <div class="form-group">
+            <label for="station">Station</label>
+            <select id="station" name="station_id" required>
                 {% for station in stations %}
                 <option value="{{ station.id }}" {% if entry.station_id.is_some() && entry.station_id.unwrap() == station.id %}selected{% endif %}>{{ station.name }}</option>
                 {% endfor %}
             </select>
-        </label>
+        </div>
 
-        <label>
-            Mileage (km)
-            <input type="number" name="mileage_km" value="{{ entry.mileage_km }}" required>
-        </label>
+        <div class="form-group">
+            <label for="mileage">Mileage (km)</label>
+            <input type="number" id="mileage" name="mileage_km" value="{{ entry.mileage_km }}" required>
+        </div>
         
-        <label>
-            Litres
-            <input type="number" step="0.01" name="litres" value="{{ entry.litres }}" required>
-        </label>
+        <div class="form-group">
+            <label for="litres">Litres</label>
+            <input type="number" id="litres" step="0.01" name="litres" value="{{ entry.litres }}" required>
+        </div>
         
-        <label>
-            Cost
-            <input type="number" step="0.01" name="cost" value="{{ entry.cost }}" required>
-        </label>
+        <div class="form-group">
+            <label for="cost">Cost (€)</label>
+            <input type="number" id="cost" step="0.01" name="cost" value="{{ entry.cost }}" required>
+        </div>
 
-        <label>
-            Date/Time
-            <input type="datetime-local" name="filled_at" value="{{ filled_at_formatted }}" required>
-        </label>
+        <div class="form-group">
+            <label for="filled_at">Date/Time</label>
+            <input type="datetime-local" id="filled_at" name="filled_at" value="{{ filled_at_formatted }}" required>
+        </div>
         
-        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-            <button type="submit">Update Entry</button>
+        <div style="display: flex; gap: 1rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+            <button type="submit">💾 Update Entry</button>
             <a href="/dashboard" class="btn btn-outline">Cancel</a>
         </div>
     </form>
