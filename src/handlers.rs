@@ -1,7 +1,7 @@
 use askama::Template;
 use axum::{
     Form,
-    extract::{Multipart, State},
+    extract::{Multipart, Query, State},
     http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse, Redirect},
 };
@@ -832,12 +832,86 @@ pub async fn htmx_recent_entries(
 }
 
 #[derive(Template)]
+#[template(path = "fragments/station_search_results.html")]
+pub struct StationSearchResultsTemplate {
+    pub stations: Vec<FuelStation>,
+    pub query: String,
+}
+
+pub async fn htmx_station_search(
+    State(pool): State<Pool>,
+    user: AuthUser,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let query = params.get("q").cloned().unwrap_or_default();
+    let query_lower = query.to_lowercase();
+
+    if query.len() < 2 {
+        return Ok(Html(String::new()));
+    }
+
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = user.user_id;
+
+    // Fetch all stations for the user (user's own + global)
+    let stations: Vec<FuelStation> = conn
+        .interact(move |conn| {
+            fuel_stations::table
+                .filter(
+                    fuel_stations::user_id
+                        .eq(user_id)
+                        .or(fuel_stations::user_id.is_null()),
+                )
+                .order(fuel_stations::name)
+                .load::<FuelStation>(conn)
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Filter stations by fuzzy matching
+    let filtered_stations: Vec<FuelStation> = stations
+        .into_iter()
+        .filter(|s| {
+            let name_lower = s.name.to_lowercase();
+            // Check if query is a substring (case-insensitive)
+            name_lower.contains(&query_lower) ||
+            // Or if all query characters appear in order
+            fuzzy_match(&name_lower, &query_lower)
+        })
+        .take(10) // Limit to 10 results
+        .collect();
+
+    let template = StationSearchResultsTemplate {
+        stations: filtered_stations,
+        query,
+    };
+    Ok(Html(template.render().map_err(internal_error)?))
+}
+
+/// Simple fuzzy matching - checks if all characters in query appear in name in order
+fn fuzzy_match(name: &str, query: &str) -> bool {
+    let mut name_chars = name.chars();
+    for query_char in query.chars() {
+        loop {
+            match name_chars.next() {
+                Some(name_char) if name_char == query_char => break,
+                None => return false,
+                _ => continue,
+            }
+        }
+    }
+    true
+}
+
+#[derive(Template)]
 #[template(path = "edit_fuel_entry.html")]
 pub struct EditFuelEntryTemplate {
     pub logged_in: bool,
     pub entry: FuelEntry,
     pub vehicle: Vehicle,
     pub stations: Vec<FuelStation>,
+    pub current_station_name: String,
     pub filled_at_formatted: String,
 }
 
@@ -879,11 +953,19 @@ pub async fn edit_fuel_entry(
 
     let filled_at_formatted = entry.filled_at.format("%Y-%m-%dT%H:%M").to_string();
 
+    // Find the current station name
+    let current_station_name = entry
+        .station_id
+        .and_then(|id| stations.iter().find(|s| s.id == id))
+        .map(|s| s.name.clone())
+        .unwrap_or_default();
+
     let template = EditFuelEntryTemplate {
         logged_in: true,
         entry,
         vehicle,
         stations,
+        current_station_name,
         filled_at_formatted,
     };
     Ok(Html(template.render().map_err(internal_error)?))
