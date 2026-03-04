@@ -6,7 +6,7 @@
 <div class="card" style="max-width: 500px; margin: 0 auto;">
     <h1>Edit Fuel Entry</h1>
     
-    <form hx-post="/fuel-entries/{{ entry.id }}" hx-target="#entry-result" class="add-entry-form">
+    <form action="/fuel-entries/{{ entry.id }}" method="post" class="add-entry-form">
         <label>
             Vehicle
             <input type="text" value="{{ vehicle.make }} {{ vehicle.model }} ({{ vehicle.registration }})" disabled>
@@ -37,8 +37,6 @@
             <button type="submit">Update Entry</button>
             <a href="/dashboard" class="btn btn-outline">Cancel</a>
         </div>
-        
-        <div id="entry-result"></div>
     </form>
 </div>
 {% endblock %}
