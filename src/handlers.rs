@@ -1134,6 +1134,156 @@ pub async fn htmx_import_execute(
     Ok(Html(template.render().map_err(internal_error)?))
 }
 
+#[derive(Template)]
+#[template(path = "stations.html")]
+pub struct StationsTemplate {
+    pub logged_in: bool,
+    pub stations: Vec<FuelStation>,
+}
+
+pub async fn stations_page(
+    State(pool): State<Pool>,
+    AuthUserRedirect(user): AuthUserRedirect,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = user.user_id;
+
+    let stations: Vec<FuelStation> = conn
+        .interact(move |conn| {
+            fuel_stations::table
+                .filter(
+                    fuel_stations::user_id
+                        .eq(user_id)
+                        .or(fuel_stations::user_id.is_null()),
+                )
+                .order(fuel_stations::name)
+                .load::<FuelStation>(conn)
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let template = StationsTemplate {
+        logged_in: true,
+        stations,
+    };
+    Ok(Html(template.render().map_err(internal_error)?))
+}
+
+#[derive(Deserialize)]
+pub struct CreateStationForm {
+    pub name: String,
+}
+
+pub async fn create_station(
+    State(pool): State<Pool>,
+    user: AuthUser,
+    Form(payload): Form<CreateStationForm>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = user.user_id;
+
+    conn.interact(move |conn| {
+        diesel::insert_into(fuel_stations::table)
+            .values(NewFuelStation {
+                name: payload.name,
+                user_id: Some(user_id),
+            })
+            .execute(conn)
+    })
+    .await
+    .map_err(internal_error)?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert("HX-Redirect", "/stations".parse().unwrap());
+    Ok((headers, Redirect::to("/stations")))
+}
+
+#[derive(Deserialize)]
+pub struct UpdateStationForm {
+    pub name: String,
+}
+
+pub async fn update_station(
+    State(pool): State<Pool>,
+    user: AuthUser,
+    axum::extract::Path(station_id): axum::extract::Path<i32>,
+    Form(payload): Form<UpdateStationForm>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = user.user_id;
+
+    let is_owner: bool = conn
+        .interact(move |conn| {
+            fuel_stations::table
+                .filter(fuel_stations::id.eq(station_id))
+                .filter(fuel_stations::user_id.eq(user_id))
+                .select(fuel_stations::id)
+                .first::<i32>(conn)
+                .optional()
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .is_some();
+
+    if !is_owner {
+        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+    }
+
+    conn.interact(move |conn| {
+        diesel::update(fuel_stations::table.filter(fuel_stations::id.eq(station_id)))
+            .set(crate::models::UpdateFuelStation {
+                name: Some(payload.name),
+            })
+            .execute(conn)
+    })
+    .await
+    .map_err(internal_error)?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert("HX-Redirect", "/stations".parse().unwrap());
+    Ok((headers, Redirect::to("/stations")))
+}
+
+pub async fn delete_station(
+    State(pool): State<Pool>,
+    user: AuthUser,
+    axum::extract::Path(station_id): axum::extract::Path<i32>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = user.user_id;
+
+    let is_owner: bool = conn
+        .interact(move |conn| {
+            fuel_stations::table
+                .filter(fuel_stations::id.eq(station_id))
+                .filter(fuel_stations::user_id.eq(user_id))
+                .select(fuel_stations::id)
+                .first::<i32>(conn)
+                .optional()
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .is_some();
+
+    if !is_owner {
+        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+    }
+
+    conn.interact(move |conn| {
+        diesel::delete(fuel_stations::table.filter(fuel_stations::id.eq(station_id))).execute(conn)
+    })
+    .await
+    .map_err(internal_error)?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Html(""))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

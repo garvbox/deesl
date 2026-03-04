@@ -63,6 +63,13 @@ pub struct NewFuelStation {
     pub user_id: Option<i32>,
 }
 
+#[derive(AsChangeset, serde::Deserialize)]
+#[diesel(table_name = crate::schema::fuel_stations)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct UpdateFuelStation {
+    pub name: Option<String>,
+}
+
 #[derive(Queryable, Selectable, serde::Serialize)]
 #[diesel(table_name = crate::schema::fuel_entries)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
