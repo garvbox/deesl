@@ -986,6 +986,7 @@ pub async fn import_page(
 #[derive(Template)]
 #[template(path = "fragments/import_mapping.html")]
 pub struct ImportMappingTemplate {
+    pub import_id: String,
     pub vehicle_id: i32,
     pub columns: Vec<String>,
     pub sample_data: Vec<String>,
@@ -1031,6 +1032,41 @@ pub async fn htmx_import_preview(
 
     check_vehicle_write_access(&pool, user.user_id, vehicle_id).await?;
 
+    // Clean up any old imports for this user first
+    let user_id = user.user_id;
+    let conn = pool.get().await.map_err(internal_error)?;
+    let _ = conn
+        .interact(move |conn| {
+            diesel::delete(
+                crate::schema::temp_imports::table
+                    .filter(crate::schema::temp_imports::user_id.eq(user_id))
+                    .filter(
+                        crate::schema::temp_imports::created_at
+                            .lt(chrono::Utc::now().naive_utc() - chrono::Duration::hours(1)),
+                    ),
+            )
+            .execute(conn)
+        })
+        .await
+        .map_err(internal_error)?;
+
+    // Store CSV in temp_imports table
+    let conn = pool.get().await.map_err(internal_error)?;
+    let csv_data_clone = csv_data.clone();
+    let temp_import: crate::models::TempImport = conn
+        .interact(move |conn| {
+            diesel::insert_into(crate::schema::temp_imports::table)
+                .values(crate::models::NewTempImport {
+                    user_id,
+                    vehicle_id,
+                    csv_data: csv_data_clone,
+                })
+                .get_result(conn)
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
     let mut reader = csv::Reader::from_reader(&csv_data[..]);
     let headers: Vec<String> = reader
         .headers()
@@ -1071,6 +1107,7 @@ pub async fn htmx_import_preview(
     }
 
     let template = ImportMappingTemplate {
+        import_id: temp_import.id.to_string(),
         vehicle_id,
         columns: headers,
         sample_data: record,
@@ -1093,51 +1130,72 @@ pub struct ImportResultTemplate {
 pub async fn htmx_import_execute(
     State(pool): State<Pool>,
     user: AuthUser,
-    mut multipart: Multipart,
+    Form(payload): Form<std::collections::HashMap<String, String>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let mut csv_data: Option<Vec<u8>> = None;
-    let mut vehicle_id: Option<i32> = None;
-    let mut mappings_raw: HashMap<String, String> = HashMap::new();
+    let user_id = user.user_id;
 
-    while let Some(field) = multipart.next_field().await.map_err(internal_error)? {
-        let name = field.name().unwrap_or("").to_string();
-        let data = field.bytes().await.map_err(internal_error)?;
+    // Extract import_id and vehicle_id from form
+    let import_id = payload
+        .get("import_id")
+        .ok_or((StatusCode::BAD_REQUEST, "import_id required".to_string()))?;
+    let vehicle_id = payload
+        .get("vehicle_id")
+        .ok_or((StatusCode::BAD_REQUEST, "vehicle_id required".to_string()))?
+        .parse::<i32>()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid vehicle_id".to_string()))?;
 
-        match name.as_str() {
-            "file" => csv_data = Some(data.to_vec()),
-            "vehicle_id" => {
-                vehicle_id =
-                    Some(String::from_utf8_lossy(&data).trim().parse().map_err(|_| {
-                        (StatusCode::BAD_REQUEST, "Invalid vehicle_id".to_string())
-                    })?);
-            }
-            _ if name.starts_with("map_") => {
-                mappings_raw.insert(name, String::from_utf8_lossy(&data).to_string());
-            }
-            _ if name.starts_with("col_") => {
-                mappings_raw.insert(name, String::from_utf8_lossy(&data).to_string());
-            }
-            _ => {}
-        }
-    }
+    // Parse import_id as UUID
+    let import_uuid = uuid::Uuid::parse_str(import_id).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "Invalid import_id format".to_string(),
+        )
+    })?;
 
-    let vehicle_id =
-        vehicle_id.ok_or((StatusCode::BAD_REQUEST, "vehicle_id required".to_string()))?;
-    let csv_data = csv_data.ok_or((StatusCode::BAD_REQUEST, "No file uploaded".to_string()))?;
+    // Retrieve CSV data from temp_imports table and verify ownership
+    let conn = pool.get().await.map_err(internal_error)?;
+    let temp_import: crate::models::TempImport = conn
+        .interact(move |conn| {
+            crate::schema::temp_imports::table
+                .filter(crate::schema::temp_imports::id.eq(import_uuid))
+                .filter(crate::schema::temp_imports::user_id.eq(user_id))
+                .first::<crate::models::TempImport>(conn)
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|_| {
+            (
+                StatusCode::NOT_FOUND,
+                "Import not found or expired".to_string(),
+            )
+        })?;
 
+    // Build mappings from form data
     let mut actual_mappings: HashMap<String, String> = HashMap::new();
     let mut i = 0;
-    while let Some(col_name) = mappings_raw.get(&format!("col_{}", i)) {
-        if let Some(target_field) = mappings_raw
-            .get(&format!("map_{}", i))
-            .filter(|s| !s.is_empty())
-        {
+    while let Some(col_name) = payload.get(&format!("col_{}", i)) {
+        if let Some(target_field) = payload.get(&format!("map_{}", i)).filter(|s| !s.is_empty()) {
             actual_mappings.insert(target_field.clone(), col_name.clone());
         }
         i += 1;
     }
 
+    // Perform the import
+    let csv_data = temp_import.csv_data;
     let result = perform_import(&pool, user.user_id, vehicle_id, csv_data, actual_mappings).await?;
+
+    // Clean up the temp import after successful/failed execution
+    let import_uuid_clone = import_uuid;
+    let _ = conn
+        .interact(move |conn| {
+            diesel::delete(
+                crate::schema::temp_imports::table
+                    .filter(crate::schema::temp_imports::id.eq(import_uuid_clone)),
+            )
+            .execute(conn)
+        })
+        .await
+        .map_err(internal_error)?;
 
     let template = if result.total_errors > 0 && result.imported == 0 {
         ImportResultTemplate {
