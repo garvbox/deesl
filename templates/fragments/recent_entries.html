@@ -8,6 +8,7 @@
                 <th style="padding: 0.5rem;">Vehicle</th>
                 <th style="padding: 0.5rem;">Litres</th>
                 <th style="padding: 0.5rem;">Cost</th>
+                <th style="padding: 0.5rem;"></th>
             </tr>
         </thead>
         <tbody>
@@ -17,6 +18,9 @@
                 <td style="padding: 0.5rem;">{{ v.registration }}</td>
                 <td style="padding: 0.5rem;">{{ self.format_float(e.litres) }} L</td>
                 <td style="padding: 0.5rem;">€{{ self.format_float(e.cost) }}</td>
+                <td style="padding: 0.5rem; text-align: right;">
+                    <a href="/fuel-entries/{{ e.id }}/edit" class="btn btn-small btn-outline">Edit</a>
+                </td>
             </tr>
             {% endfor %}
         </tbody>

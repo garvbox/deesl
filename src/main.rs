@@ -133,6 +133,8 @@ async fn main() {
         .route("/vehicles/new", get(handlers::new_vehicle))
         .route("/fuel-entries/new", get(handlers::new_fuel_entry))
         .route("/fuel-entries", post(handlers::create_fuel_entry))
+        .route("/fuel-entries/{id}/edit", get(handlers::edit_fuel_entry))
+        .route("/fuel-entries/{id}", post(handlers::update_fuel_entry))
         .route("/import", get(handlers::import_page))
         .route("/htmx/import/preview", post(handlers::htmx_import_preview))
         .route("/htmx/import/execute", post(handlers::htmx_import_execute))
