@@ -127,3 +127,23 @@ pub struct NewVehicleShare {
     pub shared_with_user_id: i32,
     pub permission_level: Option<String>,
 }
+
+#[derive(Queryable, Selectable, serde::Serialize)]
+#[diesel(table_name = crate::schema::temp_imports)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct TempImport {
+    pub id: uuid::Uuid,
+    pub user_id: i32,
+    pub vehicle_id: i32,
+    pub csv_data: Vec<u8>,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Insertable, serde::Deserialize)]
+#[diesel(table_name = crate::schema::temp_imports)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewTempImport {
+    pub user_id: i32,
+    pub vehicle_id: i32,
+    pub csv_data: Vec<u8>,
+}

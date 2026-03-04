@@ -18,7 +18,23 @@ pub async fn create_test_pool() -> Pool {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/deesl_test".to_string());
     let manager = Manager::new(database_url, deadpool_diesel::Runtime::Tokio1);
-    Pool::builder(manager).build().unwrap()
+    let pool = Pool::builder(manager).build().unwrap();
+
+    // Run migrations (only needed for first test, diesel tracks which ran)
+    let conn = pool
+        .get()
+        .await
+        .expect("Failed to get connection from pool");
+    let _ = conn
+        .interact(|conn| {
+            use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
+            const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
+            // Use ignore to avoid panicking if migrations already ran or table exists
+            let _ = conn.run_pending_migrations(MIGRATIONS);
+        })
+        .await;
+
+    pool
 }
 
 /// Creates a test app with the given database pool
@@ -220,5 +236,30 @@ pub async fn post_import_csv(
         .post(path)
         .add_header("Cookie", format!("auth_token={}", token))
         .multipart(form)
+        .await
+}
+
+/// Posts import execute data as form (not multipart, since file is already stored)
+pub async fn post_import_execute(
+    server: &TestServer,
+    token: &str,
+    import_id: &str,
+    vehicle_id: i32,
+    mappings: std::collections::HashMap<String, String>,
+) -> TestResponse {
+    use std::collections::HashMap;
+
+    let mut form_data: HashMap<String, String> = HashMap::new();
+    form_data.insert("import_id".to_string(), import_id.to_string());
+    form_data.insert("vehicle_id".to_string(), vehicle_id.to_string());
+
+    for (k, v) in mappings {
+        form_data.insert(k, v);
+    }
+
+    server
+        .post("/htmx/import/execute")
+        .add_header("Cookie", format!("auth_token={}", token))
+        .form(&form_data)
         .await
 }

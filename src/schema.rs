@@ -23,6 +23,16 @@ diesel::table! {
 }
 
 diesel::table! {
+    temp_imports (id) {
+        id -> Uuid,
+        user_id -> Int4,
+        vehicle_id -> Int4,
+        csv_data -> Bytea,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     users (id) {
         id -> Int4,
         email -> Text,
@@ -57,6 +67,8 @@ diesel::table! {
 diesel::joinable!(fuel_entries -> fuel_stations (station_id));
 diesel::joinable!(fuel_entries -> vehicles (vehicle_id));
 diesel::joinable!(fuel_stations -> users (user_id));
+diesel::joinable!(temp_imports -> users (user_id));
+diesel::joinable!(temp_imports -> vehicles (vehicle_id));
 diesel::joinable!(vehicle_shares -> users (shared_with_user_id));
 diesel::joinable!(vehicle_shares -> vehicles (vehicle_id));
 diesel::joinable!(vehicles -> users (owner_id));
@@ -64,6 +76,7 @@ diesel::joinable!(vehicles -> users (owner_id));
 diesel::allow_tables_to_appear_in_same_query!(
     fuel_entries,
     fuel_stations,
+    temp_imports,
     users,
     vehicle_shares,
     vehicles,

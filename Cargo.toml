@@ -1,6 +1,6 @@
 [package]
 name = "deesl"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 
 [lib]
@@ -18,7 +18,7 @@ axum-extra = { version = "0.10", features = ["typed-header"] }
 chrono = { version = "0.4.44", features = ["serde"] }
 csv = "1.4"
 deadpool-diesel = { version = "0.6.1", features = ["postgres"] }
-diesel = { version = "2.3.6", features = ["postgres", "chrono"] }
+diesel = { version = "2.3.6", features = ["postgres", "chrono", "uuid"] }
 diesel_migrations = { version = "2.2.0", features = ["postgres"] }
 dotenvy = "0.15.7"
 headers = "0.4"
@@ -40,8 +40,8 @@ oauth2 = "4"
 reqwest = { version = "0.13.2", features = ["json"] }
 urlencoding = "2.1.3"
 tower = "0.5"
+uuid = { version = "1", features = ["v4", "serde"] }
 
 [dev-dependencies]
 axum-test = "18"
-uuid = { version = "1", features = ["v4"] }
 pretty_assertions = "1.4"

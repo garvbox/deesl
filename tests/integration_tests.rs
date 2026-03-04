@@ -231,6 +231,31 @@ async fn test_htmx_import_execute() {
         common::create_test_vehicle_db(&env.pool, user.id, "Import", "Car", "IMP-2").await;
 
     let csv_content = b"Date,Litres,Cost,Mileage\n2024-03-01,40.5,60.0,10000";
+
+    // Step 1: Call preview to store CSV and get import_id
+    let preview_response = common::post_import_csv(
+        &env.server,
+        "/htmx/import/preview",
+        &user.token,
+        vehicle_id,
+        csv_content,
+        None,
+    )
+    .await;
+
+    preview_response.assert_status_ok();
+    let preview_html = preview_response.text();
+
+    // Extract import_id from the HTML (it's in a hidden input field)
+    let import_id = preview_html
+        .split("name=\"import_id\" value=\"")
+        .nth(1)
+        .unwrap()
+        .split("\"")
+        .next()
+        .unwrap();
+
+    // Step 2: Call execute with import_id and mappings
     let mut mappings = std::collections::HashMap::new();
     mappings.insert("col_0".to_string(), "Date".to_string());
     mappings.insert("map_0".to_string(), "filled_at_date".to_string());
@@ -241,15 +266,9 @@ async fn test_htmx_import_execute() {
     mappings.insert("col_3".to_string(), "Mileage".to_string());
     mappings.insert("map_3".to_string(), "mileage_km".to_string());
 
-    let response = common::post_import_csv(
-        &env.server,
-        "/htmx/import/execute",
-        &user.token,
-        vehicle_id,
-        csv_content,
-        Some(mappings),
-    )
-    .await;
+    let response =
+        common::post_import_execute(&env.server, &user.token, import_id, vehicle_id, mappings)
+            .await;
 
     response.assert_status_ok();
     assert!(response.text().contains("Import Successful"));

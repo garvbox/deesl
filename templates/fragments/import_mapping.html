@@ -4,21 +4,10 @@
         Match each CSV column to the corresponding fuel entry field. Required: Date, Litres, Cost, Mileage.
     </p>
 
-    <!-- We need to preserve the vehicle_id and file data, but since we can't easily send the file again in a hidden field, 
-         we might need to store it temporarily on the server or use a different strategy. 
-         For HTMX simplicity, we can use hx-include to include the original file input, 
-         but it's better to use a two-step process where the file is uploaded once.
-    -->
-
-    <form hx-post="/htmx/import/execute" hx-encoding="multipart/form-data" hx-target="#import-container">
+    <form hx-post="/htmx/import/execute" hx-target="#import-container">
         <!-- Hidden inputs to carry forward state -->
+        <input type="hidden" name="import_id" value="{{ import_id }}">
         <input type="hidden" name="vehicle_id" value="{{ vehicle_id }}">
-        
-        <div style="background: var(--bg); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid var(--border);">
-            <p style="margin-top: 0; font-size: 0.8rem; font-weight: 600;">Confirm File Selection</p>
-            <input type="file" name="file" accept=".csv" required style="font-size: 0.8rem;">
-            <p style="margin-bottom: 0; font-size: 0.75rem; color: var(--text-muted);">Please select the same file again to confirm the import.</p>
-        </div>
 
         <table style="width: 100%; border-collapse: collapse; margin-bottom: 1.5rem;">
             <thead>
