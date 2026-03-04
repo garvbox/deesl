@@ -67,7 +67,10 @@ pub async fn create_test_app(pool: Pool) -> Router {
         )
         .route("/vehicles/new", get(handlers::new_vehicle))
         .route("/fuel-entries/new", get(handlers::new_fuel_entry))
-        .route("/fuel-entries", post(handlers::create_fuel_entry))
+        .route(
+            "/fuel-entries",
+            get(handlers::fuel_entries_page).post(handlers::create_fuel_entry),
+        )
         .route("/fuel-entries/{id}/edit", get(handlers::edit_fuel_entry))
         .route("/fuel-entries/{id}", post(handlers::update_fuel_entry))
         .route(
