@@ -266,14 +266,9 @@ async fn test_htmx_import_execute() {
     mappings.insert("col_3".to_string(), "Mileage".to_string());
     mappings.insert("map_3".to_string(), "mileage_km".to_string());
 
-    let response = common::post_import_execute(
-        &env.server,
-        &user.token,
-        import_id,
-        vehicle_id,
-        mappings,
-    )
-    .await;
+    let response =
+        common::post_import_execute(&env.server, &user.token, import_id, vehicle_id, mappings)
+            .await;
 
     response.assert_status_ok();
     assert!(response.text().contains("Import Successful"));

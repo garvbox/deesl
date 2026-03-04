@@ -21,7 +21,10 @@ pub async fn create_test_pool() -> Pool {
     let pool = Pool::builder(manager).build().unwrap();
 
     // Run migrations (only needed for first test, diesel tracks which ran)
-    let conn = pool.get().await.expect("Failed to get connection from pool");
+    let conn = pool
+        .get()
+        .await
+        .expect("Failed to get connection from pool");
     let _ = conn
         .interact(|conn| {
             use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
