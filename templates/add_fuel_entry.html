@@ -17,6 +17,15 @@
         </label>
 
         <label>
+            Station
+            <select name="station_id" required>
+                {% for station in stations %}
+                <option value="{{ station.id }}">{{ station.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+
+        <label>
             Mileage (km)
             <input type="number" name="mileage_km" placeholder="Current odometer" required>
         </label>

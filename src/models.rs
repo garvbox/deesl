@@ -100,6 +100,7 @@ pub struct NewFuelEntry {
 #[diesel(table_name = crate::schema::fuel_entries)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct UpdateFuelEntry {
+    pub station_id: Option<i32>,
     pub mileage_km: Option<i32>,
     pub litres: Option<f64>,
     pub cost: Option<f64>,

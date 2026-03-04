@@ -631,6 +631,7 @@ pub async fn create_vehicle(
 pub struct AddFuelEntryTemplate {
     pub logged_in: bool,
     pub vehicles: Vec<Vehicle>,
+    pub stations: Vec<FuelStation>,
     pub current_time: String,
 }
 
@@ -641,12 +642,21 @@ pub async fn new_fuel_entry(
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
-    let user_vehicles: Vec<Vehicle> = conn
+    let (user_vehicles, user_stations): (Vec<Vehicle>, Vec<FuelStation>) = conn
         .interact(move |conn| {
-            vehicles::table
+            let vehicles = vehicles::table
                 .filter(vehicles::owner_id.eq(user_id))
                 .order(vehicles::registration)
-                .load::<Vehicle>(conn)
+                .load::<Vehicle>(conn)?;
+            let stations = fuel_stations::table
+                .filter(
+                    fuel_stations::user_id
+                        .eq(user_id)
+                        .or(fuel_stations::user_id.is_null()),
+                )
+                .order(fuel_stations::name)
+                .load::<FuelStation>(conn)?;
+            Ok::<(Vec<Vehicle>, Vec<FuelStation>), diesel::result::Error>((vehicles, stations))
         })
         .await
         .map_err(internal_error)?
@@ -655,6 +665,7 @@ pub async fn new_fuel_entry(
     let template = AddFuelEntryTemplate {
         logged_in: true,
         vehicles: user_vehicles,
+        stations: user_stations,
         current_time: chrono::Local::now().format("%Y-%m-%dT%H:%M").to_string(),
     };
     Ok(Html(template.render().map_err(internal_error)?))
@@ -663,6 +674,7 @@ pub async fn new_fuel_entry(
 #[derive(Deserialize)]
 pub struct CreateFuelEntryForm {
     pub vehicle_id: i32,
+    pub station_id: i32,
     pub mileage_km: i32,
     pub litres: f64,
     pub cost: f64,
@@ -703,7 +715,7 @@ pub async fn create_fuel_entry(
         diesel::insert_into(crate::schema::fuel_entries::table)
             .values(crate::models::NewFuelEntry {
                 vehicle_id,
-                station_id: None,
+                station_id: Some(payload.station_id),
                 mileage_km: payload.mileage_km,
                 litres: payload.litres,
                 cost: payload.cost,
@@ -825,6 +837,7 @@ pub struct EditFuelEntryTemplate {
     pub logged_in: bool,
     pub entry: FuelEntry,
     pub vehicle: Vehicle,
+    pub stations: Vec<FuelStation>,
     pub filled_at_formatted: String,
 }
 
@@ -836,15 +849,27 @@ pub async fn edit_fuel_entry(
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
-    let result: Option<(FuelEntry, Vehicle)> = conn
+    let (result, stations): (Option<(FuelEntry, Vehicle)>, Vec<FuelStation>) = conn
         .interact(move |conn| {
-            crate::schema::fuel_entries::table
+            let entry_result = crate::schema::fuel_entries::table
                 .inner_join(vehicles::table)
                 .filter(crate::schema::fuel_entries::id.eq(entry_id))
                 .filter(vehicles::owner_id.eq(user_id))
                 .select((FuelEntry::as_select(), Vehicle::as_select()))
                 .first::<(FuelEntry, Vehicle)>(conn)
-                .optional()
+                .optional()?;
+            let stations = fuel_stations::table
+                .filter(
+                    fuel_stations::user_id
+                        .eq(user_id)
+                        .or(fuel_stations::user_id.is_null()),
+                )
+                .order(fuel_stations::name)
+                .load::<FuelStation>(conn)?;
+            Ok::<(Option<(FuelEntry, Vehicle)>, Vec<FuelStation>), diesel::result::Error>((
+                entry_result,
+                stations,
+            ))
         })
         .await
         .map_err(internal_error)?
@@ -858,6 +883,7 @@ pub async fn edit_fuel_entry(
         logged_in: true,
         entry,
         vehicle,
+        stations,
         filled_at_formatted,
     };
     Ok(Html(template.render().map_err(internal_error)?))
@@ -865,6 +891,7 @@ pub async fn edit_fuel_entry(
 
 #[derive(Deserialize)]
 pub struct UpdateFuelEntryForm {
+    pub station_id: i32,
     pub mileage_km: i32,
     pub litres: f64,
     pub cost: f64,
@@ -907,6 +934,7 @@ pub async fn update_fuel_entry(
             crate::schema::fuel_entries::table.filter(crate::schema::fuel_entries::id.eq(entry_id)),
         )
         .set(crate::models::UpdateFuelEntry {
+            station_id: Some(payload.station_id),
             mileage_km: Some(payload.mileage_km),
             litres: Some(payload.litres),
             cost: Some(payload.cost),

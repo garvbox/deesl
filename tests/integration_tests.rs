@@ -169,9 +169,11 @@ async fn test_create_fuel_entry_and_redirects() {
     let user = common::create_test_user(&env, "fuel_test").await;
     let vehicle_id =
         common::create_test_vehicle_db(&env.pool, user.id, "Ford", "Focus", "FORD-F").await;
+    let station_id = common::create_test_station_db(&env.pool, user.id, "Test Station").await;
 
     let form = [
         ("vehicle_id", vehicle_id.to_string()),
+        ("station_id", station_id.to_string()),
         ("mileage_km", "100500".to_string()),
         ("litres", "50.0".to_string()),
         ("cost", "80.0".to_string()),
