@@ -274,3 +274,74 @@ async fn test_htmx_import_execute() {
     assert!(response.text().contains("Import Successful"));
     assert!(response.text().contains("1")); // 1 imported
 }
+
+#[tokio::test]
+async fn test_merge_stations() {
+    let env = common::create_test_env().await;
+    let user = common::create_test_user(&env, "merge_test").await;
+    let vehicle_id =
+        common::create_test_vehicle_db(&env.pool, user.id, "Merge", "Car", "MERGE-1").await;
+
+    // Create two stations
+    let station1_id = common::create_test_station_db(&env.pool, user.id, "Station 1").await;
+    let station2_id = common::create_test_station_db(&env.pool, user.id, "Station 2").await;
+
+    // Create a fuel entry for station 1
+    let conn = env.pool.get().await.unwrap();
+    conn.interact(move |conn| {
+        diesel::insert_into(deesl::schema::fuel_entries::table)
+            .values((
+                deesl::schema::fuel_entries::vehicle_id.eq(vehicle_id),
+                deesl::schema::fuel_entries::station_id.eq(Some(station1_id)),
+                deesl::schema::fuel_entries::mileage_km.eq(100),
+                deesl::schema::fuel_entries::litres.eq(10.0),
+                deesl::schema::fuel_entries::cost.eq(15.0),
+                deesl::schema::fuel_entries::filled_at.eq(chrono::Utc::now().naive_utc()),
+            ))
+            .execute(conn)
+    })
+    .await
+    .unwrap()
+    .unwrap();
+
+    // Merge station 1 into station 2
+    let form = [("target_id", station2_id.to_string())];
+    let response = env
+        .server
+        .post(&format!("/stations/{}/merge", station1_id))
+        .with_auth(&user.token)
+        .form(&form)
+        .await;
+
+    response.assert_status(StatusCode::SEE_OTHER);
+    assert_eq!(response.header("HX-Redirect"), "/stations");
+
+    // Verify station 1 is deleted
+    let conn = env.pool.get().await.unwrap();
+    let s1_exists: bool = conn
+        .interact(move |conn| {
+            deesl::schema::fuel_stations::table
+                .filter(deesl::schema::fuel_stations::id.eq(station1_id))
+                .first::<deesl::models::FuelStation>(conn)
+                .optional()
+                .map(|s| s.is_some())
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!s1_exists);
+
+    // Verify entry now points to station 2
+    let conn = env.pool.get().await.unwrap();
+    let entry_station_id: Option<i32> = conn
+        .interact(move |conn| {
+            deesl::schema::fuel_entries::table
+                .filter(deesl::schema::fuel_entries::vehicle_id.eq(vehicle_id))
+                .select(deesl::schema::fuel_entries::station_id)
+                .first::<Option<i32>>(conn)
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(entry_station_id, Some(station2_id));
+}
