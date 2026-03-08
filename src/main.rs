@@ -112,6 +112,7 @@ async fn main() {
     let app_state = AppState {
         pool,
         oauth: oauth_handlers::OAuthConfig::new(&config.base_url),
+        auth: deesl::auth::AuthConfig::new(),
     };
 
     let mut app = Router::new()

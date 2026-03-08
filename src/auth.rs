@@ -1,5 +1,5 @@
 use axum::{
-    extract::FromRequestParts,
+    extract::{FromRef, FromRequestParts},
     http::{HeaderMap, StatusCode, request::Parts},
     response::Redirect,
 };
@@ -83,12 +83,14 @@ pub struct AuthUser {
 
 impl<S> FromRequestParts<S> for AuthUser
 where
+    AuthConfig: FromRef<S>,
     S: Send + Sync,
 {
     type Rejection = (StatusCode, String);
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        extract_auth_user(&parts.headers)
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let auth_config = AuthConfig::from_ref(state);
+        extract_auth_user(&parts.headers, &auth_config)
     }
 }
 
@@ -97,12 +99,14 @@ pub struct AuthUserRedirect(pub AuthUser);
 
 impl<S> FromRequestParts<S> for AuthUserRedirect
 where
+    AuthConfig: FromRef<S>,
     S: Send + Sync,
 {
     type Rejection = Redirect;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        match extract_auth_user(&parts.headers) {
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let auth_config = AuthConfig::from_ref(state);
+        match extract_auth_user(&parts.headers, &auth_config) {
             Ok(user) => Ok(AuthUserRedirect(user)),
             Err(_) => Err(Redirect::to("/login")),
         }
@@ -119,7 +123,10 @@ pub fn is_dev_auth_bypass_allowed(_headers: &HeaderMap) -> Option<String> {
     std::env::var(DEV_AUTH_EMAIL_KEY).ok()
 }
 
-pub fn extract_auth_user(headers: &HeaderMap) -> Result<AuthUser, (StatusCode, String)> {
+pub fn extract_auth_user(
+    headers: &HeaderMap,
+    auth_config: &AuthConfig,
+) -> Result<AuthUser, (StatusCode, String)> {
     // Dev bypass for local testing - simplified: just set DEV_AUTH_EMAIL
     if let Some(email) = is_dev_auth_bypass_allowed(headers) {
         return Ok(AuthUser { user_id: 1, email });
@@ -128,7 +135,6 @@ pub fn extract_auth_user(headers: &HeaderMap) -> Result<AuthUser, (StatusCode, S
     let token = extract_cookie(headers, "auth_token")
         .ok_or((StatusCode::UNAUTHORIZED, "Missing auth token".to_string()))?;
 
-    let auth_config = AuthConfig::new();
     let claims = auth_config
         .validate_token(&token)
         .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;

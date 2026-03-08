@@ -1017,25 +1017,10 @@ pub async fn create_fuel_entry(
     Form(payload): Form<CreateFuelEntryForm>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let conn = pool.get().await.map_err(internal_error)?;
-    let user_id = user.user_id;
+    let _user_id = user.user_id;
     let vehicle_id = payload.vehicle_id;
 
-    let is_owner: bool = conn
-        .interact(move |conn| {
-            vehicles::table
-                .filter(vehicles::id.eq(vehicle_id))
-                .filter(vehicles::owner_id.eq(user_id))
-                .first::<Vehicle>(conn)
-                .optional()
-        })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .is_some();
-
-    if !is_owner {
-        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
-    }
+    check_vehicle_write_access(&pool, user.user_id, vehicle_id).await?;
 
     let filled_at = payload
         .filled_at
@@ -1132,25 +1117,21 @@ pub async fn htmx_delete_fuel_entry(
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
-    // First check if entry exists and user owns the vehicle
-    let is_owner: bool = conn
+    // First check if entry exists and get vehicle_id
+    let vehicle_id: i32 = conn
         .interact(move |conn| {
             crate::schema::fuel_entries::table
-                .inner_join(vehicles::table)
                 .filter(crate::schema::fuel_entries::id.eq(id))
-                .filter(vehicles::owner_id.eq(user_id))
-                .select(crate::schema::fuel_entries::id)
+                .select(crate::schema::fuel_entries::vehicle_id)
                 .first::<i32>(conn)
                 .optional()
         })
         .await
         .map_err(internal_error)?
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .is_some();
+        .ok_or((StatusCode::NOT_FOUND, "Entry not found".to_string()))?;
 
-    if !is_owner {
-        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
-    }
+    check_vehicle_write_access(&pool, user_id, vehicle_id).await?;
 
     // Delete the entry
     conn.interact(move |conn| {
@@ -1366,24 +1347,20 @@ pub async fn update_fuel_entry(
     let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
-    let is_owner: bool = conn
+    let vehicle_id: i32 = conn
         .interact(move |conn| {
             crate::schema::fuel_entries::table
-                .inner_join(vehicles::table)
                 .filter(crate::schema::fuel_entries::id.eq(entry_id))
-                .filter(vehicles::owner_id.eq(user_id))
-                .select(crate::schema::fuel_entries::id)
+                .select(crate::schema::fuel_entries::vehicle_id)
                 .first::<i32>(conn)
                 .optional()
         })
         .await
         .map_err(internal_error)?
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .is_some();
+        .ok_or((StatusCode::NOT_FOUND, "Entry not found".to_string()))?;
 
-    if !is_owner {
-        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
-    }
+    check_vehicle_write_access(&pool, user_id, vehicle_id).await?;
 
     let filled_at = chrono::NaiveDateTime::parse_from_str(&payload.filled_at, "%Y-%m-%dT%H:%M")
         .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid date format".to_string()))?;

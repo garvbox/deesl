@@ -192,6 +192,73 @@ async fn test_create_fuel_entry_and_redirects() {
 }
 
 #[tokio::test]
+async fn test_create_fuel_entry_with_shared_write_access() {
+    let env = common::create_test_env().await;
+    let owner = common::create_test_user(&env, "owner").await;
+    let shared_user = common::create_test_user(&env, "shared").await;
+
+    let vehicle_id =
+        common::create_test_vehicle_db(&env.pool, owner.id, "Shared", "Car", "SHARE-1").await;
+    let station_id = common::create_test_station_db(&env.pool, owner.id, "Test Station").await;
+
+    // Create a share with write access
+    common::create_test_vehicle_share_db(&env.pool, vehicle_id, shared_user.id, "write").await;
+
+    let form = [
+        ("vehicle_id", vehicle_id.to_string()),
+        ("station_id", station_id.to_string()),
+        ("mileage_km", "100500".to_string()),
+        ("litres", "50.0".to_string()),
+        ("cost", "80.0".to_string()),
+        ("filled_at", "2024-03-01T12:00".to_string()),
+    ];
+
+    let response = env
+        .server
+        .post("/fuel-entries")
+        .with_auth(&shared_user.token)
+        .form(&form)
+        .await;
+
+    // Should now succeed (it would have failed with 403 before the fix)
+    response.assert_status(StatusCode::SEE_OTHER);
+    assert_eq!(response.header("HX-Redirect"), "/dashboard");
+}
+
+#[tokio::test]
+async fn test_create_fuel_entry_with_shared_read_access_denied() {
+    let env = common::create_test_env().await;
+    let owner = common::create_test_user(&env, "owner").await;
+    let shared_user = common::create_test_user(&env, "shared").await;
+
+    let vehicle_id =
+        common::create_test_vehicle_db(&env.pool, owner.id, "Shared", "Car", "SHARE-2").await;
+    let station_id = common::create_test_station_db(&env.pool, owner.id, "Test Station").await;
+
+    // Create a share with read access
+    common::create_test_vehicle_share_db(&env.pool, vehicle_id, shared_user.id, "read").await;
+
+    let form = [
+        ("vehicle_id", vehicle_id.to_string()),
+        ("station_id", station_id.to_string()),
+        ("mileage_km", "100500".to_string()),
+        ("litres", "50.0".to_string()),
+        ("cost", "80.0".to_string()),
+        ("filled_at", "2024-03-01T12:00".to_string()),
+    ];
+
+    let response = env
+        .server
+        .post("/fuel-entries")
+        .with_auth(&shared_user.token)
+        .form(&form)
+        .await;
+
+    // Should be forbidden
+    response.assert_status(StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn test_htmx_delete_vehicle() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "delete_test").await;
