@@ -47,7 +47,7 @@ async fn test_logout_redirects_and_clears_cookie() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "logout_test").await;
 
-    let response = env.server.get("/logout").with_auth(&user.token).await;
+    let response = env.server.get("/auth/logout").with_auth(&user.token).await;
 
     // Should redirect to login
     response.assert_status(StatusCode::SEE_OTHER);

@@ -51,7 +51,7 @@ impl OAuthConfig {
         let client_id = env::var("GOOGLE_CLIENT_ID").expect("GOOGLE_CLIENT_ID must be set");
         let client_secret =
             env::var("GOOGLE_CLIENT_SECRET").expect("GOOGLE_CLIENT_SECRET must be set");
-        let redirect_url = format!("{}/api/auth/google/callback", base_url);
+        let redirect_url = format!("{}/auth/google/callback", base_url);
 
         let client = BasicClient::new(
             ClientId::new(client_id),
@@ -81,7 +81,7 @@ impl OAuthConfig {
             ),
         )
         .set_redirect_uri(
-            RedirectUrl::new("http://localhost:8000/api/auth/google/callback".to_string())
+            RedirectUrl::new("http://localhost:8000/auth/google/callback".to_string())
                 .expect("Invalid redirect URL"),
         );
 
@@ -91,10 +91,10 @@ impl OAuthConfig {
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/auth/google", get(google_login))
-        .route("/api/auth/google/callback", get(google_callback))
+        .route("/auth/google", get(google_login))
+        .route("/auth/google/callback", get(google_callback))
+        .route("/auth/logout", get(logout))
         .route("/api/auth/me", get(get_current_user))
-        .route("/logout", get(logout))
 }
 
 pub async fn google_login(State(state): State<AppState>) -> impl IntoResponse {
