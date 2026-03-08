@@ -1,17 +1,17 @@
 use askama::Template;
 use axum::{
     Form,
-    extract::{Multipart, Query, State},
+    extract::{Multipart, Query},
     http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse, Redirect},
 };
 use chrono::Datelike;
-use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::auth::{AuthUser, AuthUserRedirect};
+use crate::db::DbConn;
 use crate::models::{FuelEntry, FuelStation, NewFuelStation, NewVehicle, User, Vehicle};
 use crate::schema::{fuel_stations, users, vehicles};
 
@@ -21,6 +21,16 @@ where
     E: std::fmt::Display,
 {
     (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+}
+
+pub struct HxRedirect(pub &'static str);
+
+impl IntoResponse for HxRedirect {
+    fn into_response(self) -> axum::response::Response {
+        let mut headers = HeaderMap::new();
+        headers.insert("HX-Redirect", self.0.parse().unwrap());
+        (headers, Redirect::to(self.0)).into_response()
+    }
 }
 
 pub const SUPPORTED_CURRENCIES: &[&str] = &["EUR", "GBP", "USD", "CAD", "AUD"];
@@ -67,11 +77,10 @@ struct StationOp {
 }
 
 pub async fn check_vehicle_write_access(
-    pool: &Pool,
+    conn: &deadpool_diesel::postgres::Object,
     user_id: i32,
     vehicle_id: i32,
 ) -> Result<(), (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let has_write_access: (bool, bool) = conn
         .interact(move |conn| {
             let vehicle: Vehicle = vehicles::table
@@ -119,14 +128,13 @@ pub async fn check_vehicle_write_access(
 }
 
 pub async fn perform_import(
-    pool: &Pool,
+    conn: &deadpool_diesel::postgres::Object,
     user_id: i32,
     vehicle_id: i32,
     csv_data: Vec<u8>,
     mappings: HashMap<String, String>,
 ) -> Result<ImportResult, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
-    check_vehicle_write_access(pool, user_id, vehicle_id).await?;
+    check_vehicle_write_access(conn, user_id, vehicle_id).await?;
 
     let mut reader = csv::Reader::from_reader(&csv_data[..]);
     let headers: Vec<String> = reader
@@ -540,11 +548,10 @@ pub struct ChartData {
 }
 
 pub async fn stats_page(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     // Parse time period (default to "all")
@@ -865,10 +872,9 @@ impl SettingsTemplate {
 }
 
 pub async fn settings_page(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     let db_user: User = conn
@@ -904,7 +910,7 @@ pub struct UpdateSettingsForm {
 pub struct SettingsSuccessTemplate {}
 
 pub async fn update_settings(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     user: AuthUser,
     Form(payload): Form<UpdateSettingsForm>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
@@ -918,7 +924,6 @@ pub async fn update_settings(
         return Err((StatusCode::BAD_REQUEST, "Invalid volume unit".to_string()));
     }
 
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     conn.interact(move |conn| {
@@ -968,11 +973,10 @@ pub struct CreateVehicleForm {
 }
 
 pub async fn create_vehicle(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     user: AuthUser,
     Form(payload): Form<CreateVehicleForm>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let owner_id = user.user_id;
 
     conn.interact(move |conn| {
@@ -989,9 +993,7 @@ pub async fn create_vehicle(
     .map_err(internal_error)?
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let mut headers = HeaderMap::new();
-    headers.insert("HX-Redirect", "/dashboard".parse().unwrap());
-    Ok((headers, Redirect::to("/dashboard")))
+    Ok(HxRedirect("/dashboard"))
 }
 
 #[derive(Template)]
@@ -1006,10 +1008,9 @@ pub struct AddFuelEntryTemplate {
 }
 
 pub async fn new_fuel_entry(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     let (user_vehicles, user_stations, db_user): (Vec<Vehicle>, Vec<FuelStation>, User) = conn
@@ -1059,15 +1060,14 @@ pub struct CreateFuelEntryForm {
 }
 
 pub async fn create_fuel_entry(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     user: AuthUser,
     Form(payload): Form<CreateFuelEntryForm>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let _user_id = user.user_id;
     let vehicle_id = payload.vehicle_id;
 
-    check_vehicle_write_access(&pool, user.user_id, vehicle_id).await?;
+    check_vehicle_write_access(&conn, user.user_id, vehicle_id).await?;
 
     let filled_at = payload
         .filled_at
@@ -1089,9 +1089,7 @@ pub async fn create_fuel_entry(
     .map_err(internal_error)?
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let mut headers = HeaderMap::new();
-    headers.insert("HX-Redirect", "/dashboard".parse().unwrap());
-    Ok((headers, Redirect::to("/dashboard")))
+    Ok(HxRedirect("/dashboard"))
 }
 
 #[derive(Template)]
@@ -1110,10 +1108,9 @@ pub struct VehicleListTemplate {
 }
 
 pub async fn htmx_vehicles(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     user: AuthUser,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     let user_vehicles: Vec<Vehicle> = conn
@@ -1134,11 +1131,10 @@ pub async fn htmx_vehicles(
 }
 
 pub async fn htmx_delete_vehicle(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     user: AuthUser,
     axum::extract::Path(id): axum::extract::Path<i32>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     conn.interact(move |conn| {
@@ -1157,11 +1153,10 @@ pub async fn htmx_delete_vehicle(
 }
 
 pub async fn htmx_delete_fuel_entry(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     user: AuthUser,
     axum::extract::Path(id): axum::extract::Path<i32>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     // First check if entry exists and get vehicle_id
@@ -1178,7 +1173,7 @@ pub async fn htmx_delete_fuel_entry(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((StatusCode::NOT_FOUND, "Entry not found".to_string()))?;
 
-    check_vehicle_write_access(&pool, user_id, vehicle_id).await?;
+    check_vehicle_write_access(&conn, user_id, vehicle_id).await?;
 
     // Delete the entry
     conn.interact(move |conn| {
@@ -1209,10 +1204,9 @@ impl RecentEntriesTemplate {
 }
 
 pub async fn htmx_recent_entries(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     user: AuthUser,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     let (entries, db_user): (
@@ -1263,7 +1257,7 @@ pub struct StationSearchResultsTemplate {
 }
 
 pub async fn htmx_station_search(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     user: AuthUser,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
@@ -1274,7 +1268,6 @@ pub async fn htmx_station_search(
         return Ok(Html(String::new()));
     }
 
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     // Fetch all stations for the user (user's own + global)
@@ -1342,11 +1335,10 @@ pub struct EditFuelEntryTemplate {
 }
 
 pub async fn edit_fuel_entry(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
     axum::extract::Path(entry_id): axum::extract::Path<i32>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     let (result, stations, db_user): (Option<(FuelEntry, Vehicle)>, Vec<FuelStation>, User) = conn
@@ -1380,7 +1372,7 @@ pub async fn edit_fuel_entry(
 
     let (entry, vehicle) = result.ok_or((StatusCode::NOT_FOUND, "Entry not found".to_string()))?;
 
-    check_vehicle_write_access(&pool, user_id, vehicle.id).await?;
+    check_vehicle_write_access(&conn, user_id, vehicle.id).await?;
 
     let filled_at_formatted = entry.filled_at.format("%Y-%m-%dT%H:%M").to_string();
 
@@ -1414,12 +1406,11 @@ pub struct UpdateFuelEntryForm {
 }
 
 pub async fn update_fuel_entry(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     user: AuthUser,
     axum::extract::Path(entry_id): axum::extract::Path<i32>,
     Form(payload): Form<UpdateFuelEntryForm>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     let vehicle_id: i32 = conn
@@ -1435,7 +1426,7 @@ pub async fn update_fuel_entry(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((StatusCode::NOT_FOUND, "Entry not found".to_string()))?;
 
-    check_vehicle_write_access(&pool, user_id, vehicle_id).await?;
+    check_vehicle_write_access(&conn, user_id, vehicle_id).await?;
 
     let filled_at = chrono::NaiveDateTime::parse_from_str(&payload.filled_at, "%Y-%m-%dT%H:%M")
         .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid date format".to_string()))?;
@@ -1457,9 +1448,7 @@ pub async fn update_fuel_entry(
     .map_err(internal_error)?
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let mut headers = HeaderMap::new();
-    headers.insert("HX-Redirect", "/dashboard".parse().unwrap());
-    Ok((headers, Redirect::to("/dashboard")))
+    Ok(HxRedirect("/dashboard"))
 }
 
 #[derive(Template)]
@@ -1470,10 +1459,9 @@ pub struct ImportTemplate {
 }
 
 pub async fn import_page(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     let user_vehicles: Vec<Vehicle> = conn
@@ -1514,7 +1502,7 @@ impl ImportMappingTemplate {
 }
 
 pub async fn htmx_import_preview(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     user: AuthUser,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
@@ -1541,11 +1529,10 @@ pub async fn htmx_import_preview(
         vehicle_id.ok_or((StatusCode::BAD_REQUEST, "vehicle_id required".to_string()))?;
     let csv_data = csv_data.ok_or((StatusCode::BAD_REQUEST, "No file uploaded".to_string()))?;
 
-    check_vehicle_write_access(&pool, user.user_id, vehicle_id).await?;
+    check_vehicle_write_access(&conn, user.user_id, vehicle_id).await?;
 
     // Clean up any old imports for this user first
     let user_id = user.user_id;
-    let conn = pool.get().await.map_err(internal_error)?;
     let _ = conn
         .interact(move |conn| {
             diesel::delete(
@@ -1562,7 +1549,6 @@ pub async fn htmx_import_preview(
         .map_err(internal_error)?;
 
     // Store CSV in temp_imports table
-    let conn = pool.get().await.map_err(internal_error)?;
     let csv_data_clone = csv_data.clone();
     let temp_import: crate::models::TempImport = conn
         .interact(move |conn| {
@@ -1639,7 +1625,7 @@ pub struct ImportResultTemplate {
 }
 
 pub async fn htmx_import_execute(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     user: AuthUser,
     Form(payload): Form<std::collections::HashMap<String, String>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
@@ -1664,7 +1650,6 @@ pub async fn htmx_import_execute(
     })?;
 
     // Retrieve CSV data from temp_imports table and verify ownership
-    let conn = pool.get().await.map_err(internal_error)?;
     let temp_import: crate::models::TempImport = conn
         .interact(move |conn| {
             crate::schema::temp_imports::table
@@ -1712,7 +1697,7 @@ pub async fn htmx_import_execute(
 
     // Perform the import
     let csv_data = temp_import.csv_data;
-    let result = perform_import(&pool, user.user_id, vehicle_id, csv_data, actual_mappings).await?;
+    let result = perform_import(&conn, user.user_id, vehicle_id, csv_data, actual_mappings).await?;
 
     // Clean up the temp import after successful/failed execution
     let import_uuid_clone = import_uuid;
@@ -1758,10 +1743,9 @@ pub struct StationsTemplate {
 }
 
 pub async fn stations_page(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     let stations: Vec<FuelStation> = conn
@@ -1792,11 +1776,10 @@ pub struct CreateStationForm {
 }
 
 pub async fn create_station(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     user: AuthUser,
     Form(payload): Form<CreateStationForm>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     conn.interact(move |conn| {
@@ -1811,9 +1794,7 @@ pub async fn create_station(
     .map_err(internal_error)?
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let mut headers = HeaderMap::new();
-    headers.insert("HX-Redirect", "/stations".parse().unwrap());
-    Ok((headers, Redirect::to("/stations")))
+    Ok(HxRedirect("/stations"))
 }
 
 #[derive(Deserialize)]
@@ -1822,12 +1803,11 @@ pub struct UpdateStationForm {
 }
 
 pub async fn update_station(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     user: AuthUser,
     axum::extract::Path(station_id): axum::extract::Path<i32>,
     Form(payload): Form<UpdateStationForm>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     let is_owner: bool = conn
@@ -1859,9 +1839,7 @@ pub async fn update_station(
     .map_err(internal_error)?
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let mut headers = HeaderMap::new();
-    headers.insert("HX-Redirect", "/stations".parse().unwrap());
-    Ok((headers, Redirect::to("/stations")))
+    Ok(HxRedirect("/stations"))
 }
 
 #[derive(Deserialize)]
@@ -1870,12 +1848,11 @@ pub struct MergeStationsForm {
 }
 
 pub async fn merge_stations(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     user: AuthUser,
     axum::extract::Path(source_id): axum::extract::Path<i32>,
     Form(payload): Form<MergeStationsForm>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
     let target_id = payload.target_id;
 
@@ -1933,17 +1910,14 @@ pub async fn merge_stations(
     .map_err(internal_error)?
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let mut headers = HeaderMap::new();
-    headers.insert("HX-Redirect", "/stations".parse().unwrap());
-    Ok((headers, Redirect::to("/stations")))
+    Ok(HxRedirect("/stations"))
 }
 
 pub async fn delete_station(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     user: AuthUser,
     axum::extract::Path(station_id): axum::extract::Path<i32>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     let is_owner: bool = conn
@@ -1993,11 +1967,10 @@ pub struct FuelEntriesTemplate {
 }
 
 pub async fn fuel_entries_page(
-    State(pool): State<Pool>,
+    DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
     let user_id = user.user_id;
 
     // Parse filter parameters
