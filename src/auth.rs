@@ -3,10 +3,14 @@ use axum::{
     http::{HeaderMap, StatusCode, request::Parts},
     response::Redirect,
 };
+use deadpool_diesel::postgres::Pool;
+use diesel::prelude::*;
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 
+use crate::handlers::internal_error;
 use crate::oauth_handlers::extract_cookie;
+use crate::schema::users;
 
 pub const JWT_SECRET_KEY: &str = "JWT_SECRET";
 pub const DEV_AUTH_EMAIL_KEY: &str = "DEV_AUTH_EMAIL";
@@ -84,13 +88,15 @@ pub struct AuthUser {
 impl<S> FromRequestParts<S> for AuthUser
 where
     AuthConfig: FromRef<S>,
+    Pool: FromRef<S>,
     S: Send + Sync,
 {
     type Rejection = (StatusCode, String);
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let auth_config = AuthConfig::from_ref(state);
-        extract_auth_user(&parts.headers, &auth_config)
+        let pool = Pool::from_ref(state);
+        extract_auth_user(&parts.headers, &auth_config, &pool).await
     }
 }
 
@@ -100,13 +106,15 @@ pub struct AuthUserRedirect(pub AuthUser);
 impl<S> FromRequestParts<S> for AuthUserRedirect
 where
     AuthConfig: FromRef<S>,
+    Pool: FromRef<S>,
     S: Send + Sync,
 {
     type Rejection = Redirect;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let auth_config = AuthConfig::from_ref(state);
-        match extract_auth_user(&parts.headers, &auth_config) {
+        let pool = Pool::from_ref(state);
+        match extract_auth_user(&parts.headers, &auth_config, &pool).await {
             Ok(user) => Ok(AuthUserRedirect(user)),
             Err(_) => Err(Redirect::to("/login")),
         }
@@ -123,9 +131,10 @@ pub fn is_dev_auth_bypass_allowed(_headers: &HeaderMap) -> Option<String> {
     std::env::var(DEV_AUTH_EMAIL_KEY).ok()
 }
 
-pub fn extract_auth_user(
+pub async fn extract_auth_user(
     headers: &HeaderMap,
     auth_config: &AuthConfig,
+    pool: &Pool,
 ) -> Result<AuthUser, (StatusCode, String)> {
     // Dev bypass for local testing - simplified: just set DEV_AUTH_EMAIL
     if let Some(email) = is_dev_auth_bypass_allowed(headers) {
@@ -138,6 +147,29 @@ pub fn extract_auth_user(
     let claims = auth_config
         .validate_token(&token)
         .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
+
+    // Security hardening: verify user still exists in DB
+    let user_id = claims.user_id;
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_exists = conn
+        .interact(move |conn| {
+            users::table
+                .filter(users::id.eq(user_id))
+                .select(users::id)
+                .first::<i32>(conn)
+                .optional()
+        })
+        .await
+        .map_err(internal_error)?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .is_some();
+
+    if !user_exists {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "User no longer exists".to_string(),
+        ));
+    }
 
     Ok(AuthUser {
         user_id: claims.user_id,

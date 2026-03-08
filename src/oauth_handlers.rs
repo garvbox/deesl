@@ -247,7 +247,7 @@ pub async fn get_current_user(
     req_headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     // Use extract_auth_user to support dev auth bypass
-    let auth_user = extract_auth_user(&req_headers, &state.auth)?;
+    let auth_user = extract_auth_user(&req_headers, &state.auth, &state.pool).await?;
 
     Ok(Json(CurrentUserResponse {
         user_id: auth_user.user_id,
