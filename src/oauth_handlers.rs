@@ -3,7 +3,7 @@ use axum::{
     extract::State,
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Redirect},
-    routing::{get, post},
+    routing::get,
 };
 use diesel::prelude::*;
 use oauth2::{
@@ -94,7 +94,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/auth/google", get(google_login))
         .route("/api/auth/google/callback", get(google_callback))
         .route("/api/auth/me", get(get_current_user))
-        .route("/api/auth/logout", post(logout))
+        .route("/logout", get(logout))
 }
 
 pub async fn google_login(State(state): State<AppState>) -> impl IntoResponse {

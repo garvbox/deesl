@@ -43,6 +43,23 @@ async fn test_dashboard_loads_with_auth() {
 }
 
 #[tokio::test]
+async fn test_logout_redirects_and_clears_cookie() {
+    let env = common::create_test_env().await;
+    let user = common::create_test_user(&env, "logout_test").await;
+
+    let response = env.server.get("/logout").with_auth(&user.token).await;
+
+    // Should redirect to login
+    response.assert_status(StatusCode::SEE_OTHER);
+    assert_eq!(response.header("location"), "/login");
+
+    // Should clear the cookie
+    let cookie = response.header("set-cookie").to_str().unwrap().to_string();
+    assert!(cookie.contains("auth_token=;"));
+    assert!(cookie.contains("Max-Age=0"));
+}
+
+#[tokio::test]
 async fn test_htmx_vehicles_returns_fragment() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "htmx_test").await;
