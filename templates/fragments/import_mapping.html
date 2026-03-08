@@ -9,39 +9,41 @@
         <input type="hidden" name="import_id" value="{{ import_id }}">
         <input type="hidden" name="vehicle_id" value="{{ vehicle_id }}">
 
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 1.5rem;">
-            <thead>
-                <tr style="text-align: left; background: var(--bg); border-bottom: 1px solid var(--border);">
-                    <th style="padding: 0.5rem;">CSV Column</th>
-                    <th style="padding: 0.5rem;">Maps To</th>
-                    <th style="padding: 0.5rem;">Sample</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for column in columns %}
-                <tr style="border-bottom: 1px solid var(--border);">
-                    <td style="padding: 0.5rem;">{{ column }}</td>
-                    <td style="padding: 0.5rem;">
-                        <select name="map_{{ loop.index0 }}">
-                            <option value="">-- Skip --</option>
-                            <option value="filled_at_date" {% if self.is_mapped(column, "filled_at_date") %}selected{% endif %}>Date</option>
-                            <option value="filled_at_time" {% if self.is_mapped(column, "filled_at_time") %}selected{% endif %}>Time</option>
-                            <option value="station" {% if self.is_mapped(column, "station") %}selected{% endif %}>Station/Location</option>
-                            <option value="litres" {% if self.is_mapped(column, "litres") %}selected{% endif %}>Litres</option>
-                            <option value="cost" {% if self.is_mapped(column, "cost") %}selected{% endif %}>Cost</option>
-                            <option value="mileage_km" {% if self.is_mapped(column, "mileage_km") %}selected{% endif %}>Mileage (KM)</option>
-                        </select>
-                        <input type="hidden" name="col_{{ loop.index0 }}" value="{{ column }}">
-                    </td>
-                    <td style="padding: 0.5rem; color: var(--text-muted); font-size: 0.8rem;">
-                        {{ sample_data[loop.index0] }}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="table-container">
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 1.5rem;">
+                <thead>
+                    <tr style="text-align: left; background: var(--bg); border-bottom: 1px solid var(--border);">
+                        <th style="padding: 0.5rem;">CSV Column</th>
+                        <th style="padding: 0.5rem;">Maps To</th>
+                        <th style="padding: 0.5rem;">Sample</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for column in columns %}
+                    <tr style="border-bottom: 1px solid var(--border);">
+                        <td style="padding: 0.5rem;">{{ column }}</td>
+                        <td style="padding: 0.5rem;">
+                            <select name="map_{{ loop.index0 }}">
+                                <option value="">-- Skip --</option>
+                                <option value="filled_at_date" {% if self.is_mapped(column, "filled_at_date") %}selected{% endif %}>Date</option>
+                                <option value="filled_at_time" {% if self.is_mapped(column, "filled_at_time") %}selected{% endif %}>Time</option>
+                                <option value="station" {% if self.is_mapped(column, "station") %}selected{% endif %}>Station/Location</option>
+                                <option value="litres" {% if self.is_mapped(column, "litres") %}selected{% endif %}>Litres</option>
+                                <option value="cost" {% if self.is_mapped(column, "cost") %}selected{% endif %}>Cost</option>
+                                <option value="mileage_km" {% if self.is_mapped(column, "mileage_km") %}selected{% endif %}>Mileage (KM)</option>
+                            </select>
+                            <input type="hidden" name="col_{{ loop.index0 }}" value="{{ column }}">
+                        </td>
+                        <td style="padding: 0.5rem; color: var(--text-muted); font-size: 0.8rem;">
+                            {{ sample_data[loop.index0] }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
 
-        <div style="display: flex; gap: 1rem;">
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
             <button type="submit">Import Entries</button>
             <button type="button" class="btn btn-outline" onclick="window.location.reload()">Restart</button>
         </div>

@@ -5,9 +5,9 @@
 {% block content %}
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
     <h1>📊 Usage Statistics</h1>
-    
+
     <!-- Time Period Controls -->
-    <div style="display: flex; gap: 0.5rem;">
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
         <a href="/stats?period=7d" class="btn btn-small {% if period == "7d" %}btn-outline{% endif %}">7 Days</a>
         <a href="/stats?period=30d" class="btn btn-small {% if period == "30d" %}btn-outline{% endif %}">30 Days</a>
         <a href="/stats?period=90d" class="btn btn-small {% if period == "90d" %}btn-outline{% endif %}">90 Days</a>
@@ -99,9 +99,9 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { 
-                        display: {{ efficiency_chart.series.len() > 1 }}, 
-                        position: 'bottom' 
+                    legend: {
+                        display: {{ efficiency_chart.series.len() > 1 }},
+                        position: 'bottom'
                     }
                 },
                 scales: {
@@ -136,9 +136,9 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { 
-                        display: {{ cost_per_km_chart.series.len() > 1 }}, 
-                        position: 'bottom' 
+                    legend: {
+                        display: {{ cost_per_km_chart.series.len() > 1 }},
+                        position: 'bottom'
                     }
                 },
                 scales: {
@@ -173,9 +173,9 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { 
-                        display: {{ cost_per_litre_chart.series.len() > 1 }}, 
-                        position: 'bottom' 
+                    legend: {
+                        display: {{ cost_per_litre_chart.series.len() > 1 }},
+                        position: 'bottom'
                     }
                 },
                 scales: {
@@ -204,33 +204,35 @@
         <div class="card-header">
             <div class="card-title">Vehicle Statistics</div>
         </div>
-        <table>
-            <thead>
-                <tr>
-                    <th>Vehicle</th>
-                    <th>Entries</th>
-                    <th>Total KM</th>
-                    <th>Total Litres</th>
-                    <th>Avg km/L</th>
-                    <th>Total Cost</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for v in vehicle_stats %}
-                <tr>
-                    <td>
-                        <div style="font-weight: 500;">{{ v.make }} {{ v.model }}</div>
-                        <div style="font-size: 0.75rem; color: var(--text-muted);">{{ v.registration }}</div>
-                    </td>
-                    <td>{{ v.total_entries }}</td>
-                    <td>{{ "{:.0}"|format(v.total_km) }}</td>
-                    <td>{{ "{:.1}"|format(v.total_litres) }} L</td>
-                    <td style="color: var(--success); font-weight: 600;">{{ "{:.1}"|format(v.avg_efficiency) }}</td>
-                    <td>€{{ "{:.2}"|format(v.total_cost) }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Vehicle</th>
+                        <th>Entries</th>
+                        <th>Total KM</th>
+                        <th>Total Litres</th>
+                        <th>Avg km/L</th>
+                        <th>Total Cost</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in vehicle_stats %}
+                    <tr>
+                        <td>
+                            <div style="font-weight: 500;">{{ v.make }} {{ v.model }}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">{{ v.registration }}</div>
+                        </td>
+                        <td>{{ v.total_entries }}</td>
+                        <td>{{ "{:.0}"|format(v.total_km) }}</td>
+                        <td>{{ "{:.1}"|format(v.total_litres) }} L</td>
+                        <td style="color: var(--success); font-weight: 600;">{{ "{:.1}"|format(v.avg_efficiency) }}</td>
+                        <td>€{{ "{:.2}"|format(v.total_cost) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 {% endif %}
 {% endblock %}

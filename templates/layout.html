@@ -123,6 +123,21 @@
             background: var(--surface-hover);
         }
 
+        .menu-toggle {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--text);
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--radius-sm);
+        }
+
+        .menu-toggle:hover {
+            background: var(--surface-hover);
+        }
+
         /* Theme Toggle */
         .theme-toggle {
             background: var(--surface-hover);
@@ -287,10 +302,21 @@
         }
 
         /* Tables */
+        .table-container {
+            overflow-x: auto;
+            margin-bottom: 1rem;
+            -webkit-overflow-scrolling: touch;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
             font-size: 0.95rem;
+            min-width: 600px;
+        }
+
+        .table-no-min-width table {
+            min-width: 0;
         }
 
         th {
@@ -385,30 +411,65 @@
         }
 
         /* Responsive */
-        @media (max-width: 640px) {
-            .container {
+        @media (max-width: 768px) {
+            .menu-toggle {
+                display: block;
+            }
+
+            .nav-links {
+                display: none;
+                flex-direction: column;
+                position: absolute;
+                top: 100%;
+                left: 0;
+                right: 0;
+                background: var(--surface);
+                border-bottom: 1px solid var(--border);
                 padding: 1rem;
+                box-shadow: var(--shadow);
+                gap: 0;
+            }
+
+            .nav-links.active {
+                display: flex;
             }
 
             .nav-links a {
-                padding: 0.5rem;
-                font-size: 0.8rem;
+                padding: 0.875rem 1rem;
+                width: 100%;
+                border-radius: 0;
+                border-bottom: 1px solid var(--border);
             }
 
-            .nav-links a span {
-                display: none;
+            .nav-links a:last-of-type {
+                border-bottom: none;
+            }
+
+            .theme-toggle {
+                margin: 1rem;
+                align-self: flex-start;
+            }
+
+            .container {
+                padding: 1.5rem 1rem;
             }
 
             .card {
-                padding: 1rem;
+                padding: 1.25rem 1rem;
             }
 
             h1 {
-                font-size: 1.5rem;
+                font-size: 1.75rem;
             }
 
             h2 {
-                font-size: 1.25rem;
+                font-size: 1.35rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 1.5rem;
             }
         }
 
@@ -456,7 +517,10 @@
     <nav>
         <div class="nav-content">
             <a href="/" class="logo">Deesl</a>
-            <div class="nav-links">
+            <button class="menu-toggle" onclick="toggleMenu()" aria-label="Toggle menu">
+                <span id="menu-toggle-icon">☰</span>
+            </button>
+            <div class="nav-links" id="nav-links">
                 {% if logged_in %}
                     <a href="/dashboard">Dashboard</a>
                     <a href="/vehicles">Vehicles</a>
@@ -480,12 +544,38 @@
     </div>
 
     <script>
+        // Menu toggle functionality
+        function toggleMenu() {
+            const navLinks = document.getElementById('nav-links');
+            const icon = document.getElementById('menu-toggle-icon');
+            navLinks.classList.toggle('active');
+
+            if (navLinks.classList.contains('active')) {
+                icon.textContent = '✕';
+            } else {
+                icon.textContent = '☰';
+            }
+        }
+
+        // Close menu when clicking outside
+        document.addEventListener('click', function(event) {
+            const navLinks = document.getElementById('nav-links');
+            const menuToggle = document.querySelector('.menu-toggle');
+            const isClickInsideMenu = navLinks.contains(event.target);
+            const isClickInsideToggle = menuToggle.contains(event.target);
+
+            if (!isClickInsideMenu && !isClickInsideToggle && navLinks.classList.contains('active')) {
+                navLinks.classList.remove('active');
+                document.getElementById('menu-toggle-icon').textContent = '☰';
+            }
+        });
+
         // Theme toggle functionality
         function toggleTheme() {
             const html = document.documentElement;
             const currentTheme = html.getAttribute('data-theme');
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            
+
             html.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
             updateThemeIcon(newTheme);
@@ -501,7 +591,7 @@
             const savedTheme = localStorage.getItem('theme');
             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
             const theme = savedTheme || (prefersDark ? 'dark' : 'light');
-            
+
             document.documentElement.setAttribute('data-theme', theme);
             updateThemeIcon(theme);
         }
