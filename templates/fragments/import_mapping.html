@@ -4,7 +4,7 @@
         Match each CSV column to the corresponding fuel entry field. Required: Date, Litres, Cost, Mileage.
     </p>
 
-    <form hx-post="/htmx/import/execute" hx-target="#import-container">
+    <form hx-post="/import/htmx/execute" hx-target="#import-container">
         <!-- Hidden inputs to carry forward state -->
         <input type="hidden" name="import_id" value="{{ import_id }}">
         <input type="hidden" name="vehicle_id" value="{{ vehicle_id }}">

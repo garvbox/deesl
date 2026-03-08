@@ -14,7 +14,7 @@
 <div class="card">
     <h3>Your Vehicles</h3>
     <div id="vehicle-list"
-         hx-get="/htmx/vehicles"
+         hx-get="/vehicles/htmx/list"
          hx-trigger="load"
          hx-swap="innerHTML"
          hx-on::error="this.innerHTML = '<p class=\'error\'>Failed to load vehicles. Please try refreshing.</p>'">
@@ -25,7 +25,7 @@
 <div class="card">
     <h3>Recent Fuel Entries</h3>
     <div id="recent-entries"
-         hx-get="/htmx/entries/recent"
+         hx-get="/fuel-entries/htmx/recent"
          hx-trigger="load"
          hx-swap="innerHTML"
          hx-on::error="this.innerHTML = '<p class=\'error\'>Failed to load recent entries. Please try refreshing.</p>'">

@@ -33,7 +33,16 @@
                     <td>{{ self.format_float(e.litres) }} {{ volume_unit }}</td>
                     <td>€{{ self.format_float(e.cost) }}</td>
                     <td style="text-align: right;">
-                        <a href="/fuel-entries/{{ e.id }}/edit" class="btn btn-small btn-outline">Edit</a>
+                        <div style="display: flex; gap: 0.25rem; justify-content: flex-end;">
+                            <a href="/fuel-entries/{{ e.id }}/edit" class="btn btn-small btn-outline">Edit</a>
+                            <button class="btn btn-small btn-outline btn-danger"
+                                    hx-delete="/fuel-entries/htmx/{{ e.id }}"
+                                    hx-target="#entry-{{ e.id }}"
+                                    hx-swap="outerHTML"
+                                    hx-confirm="Are you sure you want to delete this entry?">
+                                Del
+                            </button>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}

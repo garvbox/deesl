@@ -52,7 +52,7 @@ async fn test_htmx_vehicles_returns_fragment() {
 
     let response = env
         .server
-        .get("/htmx/vehicles")
+        .get("/vehicles/htmx/list")
         .with_auth(&user.token)
         .await;
 
@@ -118,7 +118,7 @@ async fn test_import_preview_accepts_csv() {
 
     let response = common::post_import_csv(
         &env.server,
-        "/htmx/import/preview",
+        "/import/htmx/preview",
         &user.token,
         vehicle_id,
         csv_content,
@@ -157,7 +157,7 @@ async fn test_htmx_recent_entries_returns_fragment() {
 
     let response = env
         .server
-        .get("/htmx/entries/recent")
+        .get("/fuel-entries/htmx/recent")
         .with_auth(&user.token)
         .await;
 
@@ -271,7 +271,7 @@ async fn test_htmx_delete_vehicle() {
 
     let response = env
         .server
-        .delete(&format!("/htmx/vehicles/{}", vehicle_id))
+        .delete(&format!("/vehicles/htmx/{}", vehicle_id))
         .with_auth(&user.token)
         .await;
 
@@ -306,7 +306,7 @@ async fn test_htmx_import_execute() {
     // Step 1: Call preview to store CSV and get import_id
     let preview_response = common::post_import_csv(
         &env.server,
-        "/htmx/import/preview",
+        "/import/htmx/preview",
         &user.token,
         vehicle_id,
         csv_content,
