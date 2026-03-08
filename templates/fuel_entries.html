@@ -23,7 +23,7 @@
                 {% endfor %}
             </select>
         </div>
-        
+
         <div class="form-group" style="margin-bottom: 0;">
             <label for="station_id">Station</label>
             <select id="station_id" name="station_id">
@@ -33,17 +33,17 @@
                 {% endfor %}
             </select>
         </div>
-        
+
         <div class="form-group" style="margin-bottom: 0;">
             <label for="date_from">From Date</label>
             <input type="date" id="date_from" name="date_from" value="{{ filter_date_from }}">
         </div>
-        
+
         <div class="form-group" style="margin-bottom: 0;">
             <label for="date_to">To Date</label>
             <input type="date" id="date_to" name="date_to" value="{{ filter_date_to }}">
         </div>
-        
+
         <div class="form-group" style="margin-bottom: 0; display: flex; align-items: flex-end; gap: 0.5rem;">
             <button type="submit" class="btn">Apply Filters</button>
             <a href="/fuel-entries" class="btn btn-outline">Clear</a>
@@ -80,7 +80,7 @@
     <div class="card-header">
         <div class="card-title">Fuel Entries</div>
     </div>
-    
+
     {% if entries.is_empty() %}
         <div class="empty-state">
             <div class="empty-state-icon">⛽</div>
@@ -88,7 +88,7 @@
             <a href="/fuel-entries" class="btn btn-outline" style="margin-top: 1rem;">Clear Filters</a>
         </div>
     {% else %}
-        <div style="overflow-x: auto;">
+        <div class="table-container">
             <table>
                 <thead>
                     <tr>
