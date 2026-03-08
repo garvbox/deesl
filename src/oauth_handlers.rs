@@ -13,7 +13,7 @@ use oauth2::{
 use serde::Deserialize;
 use std::env;
 
-use crate::auth::{AuthConfig, extract_auth_user};
+use crate::auth::extract_auth_user;
 use crate::handlers::internal_error;
 use crate::models::User;
 use crate::schema::users;
@@ -200,7 +200,12 @@ pub async fn google_callback(
             }
 
             diesel::insert_into(users::table)
-                .values((users::email.eq(&email), users::google_id.eq(&google_id)))
+                .values((
+                    users::email.eq(&email),
+                    users::google_id.eq(&google_id),
+                    users::distance_unit.eq("km"),
+                    users::volume_unit.eq("L"),
+                ))
                 .returning(User::as_returning())
                 .get_result(conn)
         })
@@ -213,14 +218,12 @@ pub async fn google_callback(
             )
         })?;
 
-    let jwt = AuthConfig::new()
-        .create_token(user.id, &user.email)
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to create token: {e}"),
-            )
-        })?;
+    let jwt = state.auth.create_token(user.id, &user.email).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to create token: {e}"),
+        )
+    })?;
 
     // Clear CSRF cookie and set auth cookie with JWT
     let clear_csrf_cookie = build_clear_cookie(CSRF_COOKIE);
@@ -240,10 +243,11 @@ pub struct CurrentUserResponse {
 }
 
 pub async fn get_current_user(
+    State(state): State<AppState>,
     req_headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     // Use extract_auth_user to support dev auth bypass
-    let auth_user = extract_auth_user(&req_headers)?;
+    let auth_user = extract_auth_user(&req_headers, &state.auth, &state.pool).await?;
 
     Ok(Json(CurrentUserResponse {
         user_id: auth_user.user_id,

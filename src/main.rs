@@ -100,6 +100,8 @@ async fn main() {
                                     password_hash: None,
                                     google_id: None,
                                     currency: "EUR".to_string(),
+                                    distance_unit: "km".to_string(),
+                                    volume_unit: "L".to_string(),
                                 })
                                 .execute(conn);
                         }
@@ -112,6 +114,7 @@ async fn main() {
     let app_state = AppState {
         pool,
         oauth: oauth_handlers::OAuthConfig::new(&config.base_url),
+        auth: deesl::auth::AuthConfig::new(),
     };
 
     let mut app = Router::new()

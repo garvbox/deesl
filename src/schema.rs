@@ -40,6 +40,8 @@ diesel::table! {
         created_at -> Timestamp,
         currency -> Text,
         google_id -> Nullable<Text>,
+        distance_unit -> Text,
+        volume_unit -> Text,
     }
 }
 

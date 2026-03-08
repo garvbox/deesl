@@ -8,9 +8,9 @@
 <div class="card" style="max-width: 500px;">
     <h3>Account Information</h3>
     <p><strong>Email:</strong> {{ user_email }}</p>
-    
+
     <hr style="border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0;">
-    
+
     <h3>Preferences</h3>
     <form hx-patch="/settings" hx-target="#settings-message" hx-swap="innerHTML">
         <label>
@@ -21,7 +21,23 @@
                 {% endfor %}
             </select>
         </label>
-        
+
+        <label style="margin-top: 1rem;">
+            Distance Unit
+            <select name="distance_unit" required>
+                <option value="km" {% if self.is_current_distance_unit("km") %}selected{% endif %}>Kilometers (km)</option>
+                <option value="mi" {% if self.is_current_distance_unit("mi") %}selected{% endif %}>Miles (mi)</option>
+            </select>
+        </label>
+
+        <label style="margin-top: 1rem;">
+            Volume Unit
+            <select name="volume_unit" required>
+                <option value="L" {% if self.is_current_volume_unit("L") %}selected{% endif %}>Litres (L)</option>
+                <option value="gal" {% if self.is_current_volume_unit("gal") %}selected{% endif %}>Gallons (gal)</option>
+            </select>
+        </label>
+
         <button type="submit" style="margin-top: 0.5rem;">Save Preferences</button>
         <div id="settings-message" style="margin-top: 1rem;"></div>
     </form>

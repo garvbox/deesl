@@ -47,6 +47,7 @@ pub async fn create_test_app(pool: Pool) -> Router {
     let app_state = deesl::AppState {
         pool,
         oauth: oauth_handlers::OAuthConfig::test_config(),
+        auth: deesl::auth::AuthConfig::new(),
     };
 
     Router::new()
@@ -157,6 +158,8 @@ pub async fn create_test_user_db(pool: &Pool, email: &str) -> TestUser {
                     password_hash: None,
                     currency: "EUR".to_string(),
                     google_id: None,
+                    distance_unit: "km".to_string(),
+                    volume_unit: "L".to_string(),
                 })
                 .get_result(conn)
         })
@@ -198,6 +201,30 @@ pub async fn create_test_vehicle_db(
         .unwrap();
 
     vehicle.id
+}
+
+/// Creates a vehicle share in the database
+pub async fn create_test_vehicle_share_db(
+    pool: &Pool,
+    vehicle_id: i32,
+    shared_with_user_id: i32,
+    permission_level: &str,
+) {
+    let conn = pool.get().await.unwrap();
+    let permission_level = permission_level.to_string();
+
+    conn.interact(move |conn| {
+        diesel::insert_into(deesl::schema::vehicle_shares::table)
+            .values((
+                deesl::schema::vehicle_shares::vehicle_id.eq(vehicle_id),
+                deesl::schema::vehicle_shares::shared_with_user_id.eq(shared_with_user_id),
+                deesl::schema::vehicle_shares::permission_level.eq(permission_level),
+            ))
+            .execute(conn)
+    })
+    .await
+    .unwrap()
+    .unwrap();
 }
 
 /// Creates a test fuel station in the database

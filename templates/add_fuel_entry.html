@@ -7,7 +7,7 @@
     <div class="card-header">
         <div class="card-title">⛽ Add Fuel Entry</div>
     </div>
-    
+
     <form action="/fuel-entries" method="post">
         <div class="form-group">
             <label for="vehicle">Vehicle</label>
@@ -21,10 +21,10 @@
         <div class="form-group" style="position: relative;">
             <label for="station_search">Station</label>
             <input type="hidden" id="station_id" name="station_id" required>
-            <input type="text" 
-                   id="station_search" 
+            <input type="text"
+                   id="station_search"
                    name="q"
-                   placeholder="Type to search stations..." 
+                   placeholder="Type to search stations..."
                    autocomplete="off"
                    hx-get="/htmx/stations/search"
                    hx-trigger="keyup changed delay:200ms, focus"
@@ -33,21 +33,22 @@
                    style="width: 100%;"
                    oninput="document.getElementById('station_id').value = ''">
             <div id="station-spinner" class="htmx-indicator spinner" style="position: absolute; right: 0.75rem; top: 2.25rem;"></div>
-            <div id="station_results" 
+            <div id="station_results"
                  style="position: absolute; top: 100%; left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow); z-index: 100; max-height: 200px; overflow-y: auto;">
             </div>
         </div>
 
         <div class="form-group">
-            <label for="mileage">Mileage (km)</label>
+            <label for="mileage">Mileage ({{ distance_unit }})</label>
             <input type="number" id="mileage" name="mileage_km" placeholder="Current odometer reading" required>
         </div>
-        
+
         <div class="form-group">
-            <label for="litres">Litres</label>
-            <input type="number" id="litres" step="0.01" name="litres" placeholder="Amount filled" required>
+            <label for="litres">Amount ({{ volume_unit }})</label>
+            <input type="number" step="0.01" id="litres" name="litres" placeholder="Total {{ volume_unit }} filled" required>
         </div>
-        
+
+
         <div class="form-group">
             <label for="cost">Cost (€)</label>
             <input type="number" id="cost" step="0.01" name="cost" placeholder="Total cost" required>
@@ -57,7 +58,7 @@
             <label for="filled_at">Date/Time</label>
             <input type="datetime-local" id="filled_at" name="filled_at" value="{{ current_time }}">
         </div>
-        
+
         <div style="display: flex; gap: 1rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
             <button type="submit">💾 Save Entry</button>
             <a href="/dashboard" class="btn btn-outline">Cancel</a>
