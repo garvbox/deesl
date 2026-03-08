@@ -12,8 +12,8 @@
                         <div style="font-weight: 600; color: var(--text);">{{ v.make }} {{ v.model }}</div>
                         <div style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem;">{{ v.registration }}</div>
                     </div>
-                    <button class="btn btn-outline btn-small btn-danger" 
-                            hx-delete="/htmx/vehicles/{{ v.id }}"
+                    <button class="btn btn-outline btn-small btn-danger"
+                            hx-delete="/vehicles/htmx/{{ v.id }}"
                             hx-target="#vehicle-{{ v.id }}"
                             hx-swap="outerHTML"
                             hx-confirm="Are you sure you want to delete this vehicle?">

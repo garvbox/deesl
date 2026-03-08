@@ -9,7 +9,7 @@
     <div id="import-container">
         <!-- Step 1: File Upload -->
         <h3>Step 1: Select Vehicle and CSV File</h3>
-        <form hx-post="/htmx/import/preview" hx-encoding="multipart/form-data" hx-target="#import-container">
+        <form hx-post="/import/htmx/preview" hx-encoding="multipart/form-data" hx-target="#import-container">
             <label>
                 Vehicle
                 <select name="vehicle_id" required>

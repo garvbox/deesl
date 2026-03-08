@@ -1,12 +1,12 @@
 <div style="padding: 1rem; border: 1px solid var(--border); border-radius: 8px;" id="vehicle-{{ id }}">
     <div style="display: flex; justify-content: space-between; align-items: center;">
         <div>
-            <strong>{{ make }} {{ model }}</strong> 
+            <strong>{{ make }} {{ model }}</strong>
             <span style="color: var(--text-muted); font-size: 0.8rem;">{{ registration }}</span>
         </div>
-        <button class="btn btn-outline" 
+        <button class="btn btn-outline"
                 style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-color: var(--error); color: var(--error);"
-                hx-delete="/htmx/vehicles/{{ id }}"
+                hx-delete="/vehicles/htmx/{{ id }}"
                 hx-target="#vehicle-{{ id }}"
                 hx-swap="outerHTML"
                 hx-confirm="Are you sure you want to delete this vehicle?">

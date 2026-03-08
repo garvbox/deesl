@@ -43,6 +43,23 @@ async fn test_dashboard_loads_with_auth() {
 }
 
 #[tokio::test]
+async fn test_logout_redirects_and_clears_cookie() {
+    let env = common::create_test_env().await;
+    let user = common::create_test_user(&env, "logout_test").await;
+
+    let response = env.server.get("/auth/logout").with_auth(&user.token).await;
+
+    // Should redirect to login
+    response.assert_status(StatusCode::SEE_OTHER);
+    assert_eq!(response.header("location"), "/login");
+
+    // Should clear the cookie
+    let cookie = response.header("set-cookie").to_str().unwrap().to_string();
+    assert!(cookie.contains("auth_token=;"));
+    assert!(cookie.contains("Max-Age=0"));
+}
+
+#[tokio::test]
 async fn test_htmx_vehicles_returns_fragment() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "htmx_test").await;
@@ -52,7 +69,7 @@ async fn test_htmx_vehicles_returns_fragment() {
 
     let response = env
         .server
-        .get("/htmx/vehicles")
+        .get("/vehicles/htmx/list")
         .with_auth(&user.token)
         .await;
 
@@ -118,7 +135,7 @@ async fn test_import_preview_accepts_csv() {
 
     let response = common::post_import_csv(
         &env.server,
-        "/htmx/import/preview",
+        "/import/htmx/preview",
         &user.token,
         vehicle_id,
         csv_content,
@@ -157,7 +174,7 @@ async fn test_htmx_recent_entries_returns_fragment() {
 
     let response = env
         .server
-        .get("/htmx/entries/recent")
+        .get("/fuel-entries/htmx/recent")
         .with_auth(&user.token)
         .await;
 
@@ -271,7 +288,7 @@ async fn test_htmx_delete_vehicle() {
 
     let response = env
         .server
-        .delete(&format!("/htmx/vehicles/{}", vehicle_id))
+        .delete(&format!("/vehicles/htmx/{}", vehicle_id))
         .with_auth(&user.token)
         .await;
 
@@ -306,7 +323,7 @@ async fn test_htmx_import_execute() {
     // Step 1: Call preview to store CSV and get import_id
     let preview_response = common::post_import_csv(
         &env.server,
-        "/htmx/import/preview",
+        "/import/htmx/preview",
         &user.token,
         vehicle_id,
         csv_content,

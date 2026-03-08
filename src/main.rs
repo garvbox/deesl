@@ -1,7 +1,4 @@
-use axum::{
-    Router,
-    routing::{delete, get, post},
-};
+use axum::{Router, routing::get};
 use deadpool_diesel::postgres::{Manager, Pool};
 use diesel::prelude::*;
 use http_security_headers::{
@@ -122,44 +119,14 @@ async fn main() {
             "/",
             get(|| async { axum::response::Redirect::to("/dashboard") }),
         )
-        .route("/login", get(handlers::login))
-        .route("/logout", get(oauth_handlers::logout))
-        .route("/dashboard", get(handlers::dashboard))
-        .route(
-            "/settings",
-            get(handlers::settings_page).patch(handlers::update_settings),
-        )
-        .route(
-            "/vehicles",
-            get(handlers::vehicles_page).post(handlers::create_vehicle),
-        )
-        .route("/vehicles/new", get(handlers::new_vehicle))
-        .route("/fuel-entries/new", get(handlers::new_fuel_entry))
-        .route(
-            "/fuel-entries",
-            get(handlers::fuel_entries_page).post(handlers::create_fuel_entry),
-        )
-        .route("/fuel-entries/{id}/edit", get(handlers::edit_fuel_entry))
-        .route("/fuel-entries/{id}", post(handlers::update_fuel_entry))
-        .route(
-            "/stations",
-            get(handlers::stations_page).post(handlers::create_station),
-        )
-        .route("/stations/{id}", post(handlers::update_station))
-        .route("/stations/{id}", delete(handlers::delete_station))
-        .route("/stations/{id}/merge", post(handlers::merge_stations))
-        .route("/stats", get(handlers::stats_page))
-        .route("/import", get(handlers::import_page))
-        .route("/htmx/import/preview", post(handlers::htmx_import_preview))
-        .route("/htmx/import/execute", post(handlers::htmx_import_execute))
-        .route("/htmx/vehicles", get(handlers::htmx_vehicles))
-        .route("/htmx/vehicles/{id}", delete(handlers::htmx_delete_vehicle))
-        .route("/htmx/entries/recent", get(handlers::htmx_recent_entries))
-        .route(
-            "/htmx/entries/{id}",
-            delete(handlers::htmx_delete_fuel_entry),
-        )
-        .route("/htmx/stations/search", get(handlers::htmx_station_search))
+        .merge(handlers::auth::router())
+        .merge(handlers::misc::router())
+        .merge(handlers::settings::router())
+        .nest("/vehicles", handlers::vehicles::router())
+        .nest("/fuel-entries", handlers::fuel_entries::router())
+        .nest("/stations", handlers::stations::router())
+        .nest("/stats", handlers::stats::router())
+        .nest("/import", handlers::import::router())
         .route("/api/version", get(serve_version))
         .merge(oauth_handlers::router())
         .layer(TraceLayer::new_for_http())

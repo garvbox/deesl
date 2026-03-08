@@ -39,7 +39,7 @@ pub async fn create_test_pool() -> Pool {
 
 /// Creates a test app with the given database pool
 pub async fn create_test_app(pool: Pool) -> Router {
-    use axum::routing::{delete, get, post};
+    use axum::routing::get;
     use deesl::handlers;
     use deesl::oauth_handlers;
     use tower_http::trace::TraceLayer;
@@ -55,46 +55,14 @@ pub async fn create_test_app(pool: Pool) -> Router {
             "/",
             get(|| async { axum::response::Redirect::to("/dashboard") }),
         )
-        .route("/login", get(handlers::login))
-        .route("/logout", get(oauth_handlers::logout))
-        .route("/dashboard", get(handlers::dashboard))
-        .route(
-            "/settings",
-            get(handlers::settings_page).patch(handlers::update_settings),
-        )
-        .route(
-            "/vehicles",
-            get(handlers::vehicles_page).post(handlers::create_vehicle),
-        )
-        .route("/vehicles/new", get(handlers::new_vehicle))
-        .route("/fuel-entries/new", get(handlers::new_fuel_entry))
-        .route(
-            "/fuel-entries",
-            get(handlers::fuel_entries_page).post(handlers::create_fuel_entry),
-        )
-        .route("/fuel-entries/{id}/edit", get(handlers::edit_fuel_entry))
-        .route("/fuel-entries/{id}", post(handlers::update_fuel_entry))
-        .route(
-            "/stations",
-            get(handlers::stations_page).post(handlers::create_station),
-        )
-        .route(
-            "/stations/{id}",
-            post(handlers::update_station).delete(handlers::delete_station),
-        )
-        .route("/stations/{id}/merge", post(handlers::merge_stations))
-        .route("/stats", get(handlers::stats_page))
-        .route("/import", get(handlers::import_page))
-        .route("/htmx/import/preview", post(handlers::htmx_import_preview))
-        .route("/htmx/import/execute", post(handlers::htmx_import_execute))
-        .route("/htmx/vehicles", get(handlers::htmx_vehicles))
-        .route("/htmx/vehicles/{id}", delete(handlers::htmx_delete_vehicle))
-        .route("/htmx/entries/recent", get(handlers::htmx_recent_entries))
-        .route(
-            "/htmx/entries/{id}",
-            delete(handlers::htmx_delete_fuel_entry),
-        )
-        .route("/htmx/stations/search", get(handlers::htmx_station_search))
+        .merge(handlers::auth::router())
+        .merge(handlers::misc::router())
+        .merge(handlers::settings::router())
+        .nest("/vehicles", handlers::vehicles::router())
+        .nest("/fuel-entries", handlers::fuel_entries::router())
+        .nest("/stations", handlers::stations::router())
+        .nest("/stats", handlers::stats::router())
+        .nest("/import", handlers::import::router())
         .merge(oauth_handlers::router())
         .layer(TraceLayer::new_for_http())
         .with_state(app_state)
@@ -297,7 +265,7 @@ pub async fn post_import_execute(
     }
 
     server
-        .post("/htmx/import/execute")
+        .post("/import/htmx/execute")
         .add_header("Cookie", format!("auth_token={}", token))
         .form(&form_data)
         .await
