@@ -55,6 +55,9 @@
                                         class="btn btn-small btn-outline"
                                         onclick="toggleEditForm({{ station.id }})">Edit</button>
                                 <button type="button" 
+                                        class="btn btn-small btn-outline"
+                                        onclick="toggleMergeForm({{ station.id }})">Merge</button>
+                                <button type="button" 
                                         class="btn btn-small btn-outline btn-danger"
                                         hx-delete="/stations/{{ station.id }}"
                                         hx-target="#station-{{ station.id }}"
@@ -71,6 +74,27 @@
                                     <button type="button" class="btn btn-small btn-outline" onclick="toggleEditForm({{ station.id }})">Cancel</button>
                                 </div>
                             </form>
+                            <form id="merge-form-{{ station.id }}" 
+                                  action="/stations/{{ station.id }}/merge" 
+                                  method="post" 
+                                  style="display: none; margin-top: 0.5rem;">
+                                <div style="display: flex; flex-direction: column; gap: 0.5rem; background: var(--bg-secondary); padding: 0.75rem; border-radius: 0.5rem; border: 1px solid var(--border);">
+                                    <label for="target-{{ station.id }}" style="font-size: 0.8rem; font-weight: 600;">Merge into:</label>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <select name="target_id" id="target-{{ station.id }}" required style="flex: 1;">
+                                            <option value="">Select target station...</option>
+                                            {% for target in stations %}
+                                                {% if target.id != station.id %}
+                                                    <option value="{{ target.id }}">{{ target.name }}</option>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </select>
+                                        <button type="submit" class="btn btn-small">Confirm</button>
+                                        <button type="button" class="btn btn-small btn-outline" onclick="toggleMergeForm({{ station.id }})">Cancel</button>
+                                    </div>
+                                    <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0;">This will move all fuel entries from this station to the selected one and delete this station.</p>
+                                </div>
+                            </form>
                         {% else %}
                             <span style="color: var(--text-muted); font-size: 0.85rem; font-style: italic;">Read-only</span>
                         {% endif %}
@@ -85,12 +109,32 @@
 <script>
 function toggleEditForm(stationId) {
     const form = document.getElementById('edit-form-' + stationId);
+    const mergeForm = document.getElementById('merge-form-' + stationId);
     const nameSpan = document.getElementById('station-name-' + stationId);
+    
+    if (mergeForm) mergeForm.style.display = 'none';
+    
     if (form.style.display === 'none') {
         form.style.display = 'block';
         if (nameSpan) nameSpan.style.display = 'none';
     } else {
         form.style.display = 'none';
+        if (nameSpan) nameSpan.style.display = 'inline';
+    }
+}
+
+function toggleMergeForm(stationId) {
+    const form = document.getElementById('edit-form-' + stationId);
+    const mergeForm = document.getElementById('merge-form-' + stationId);
+    const nameSpan = document.getElementById('station-name-' + stationId);
+    
+    if (form) form.style.display = 'none';
+    
+    if (mergeForm.style.display === 'none') {
+        mergeForm.style.display = 'block';
+        if (nameSpan) nameSpan.style.display = 'none';
+    } else {
+        mergeForm.style.display = 'none';
         if (nameSpan) nameSpan.style.display = 'inline';
     }
 }

@@ -1812,6 +1812,80 @@ pub async fn update_station(
     Ok((headers, Redirect::to("/stations")))
 }
 
+#[derive(Deserialize)]
+pub struct MergeStationsForm {
+    pub target_id: i32,
+}
+
+pub async fn merge_stations(
+    State(pool): State<Pool>,
+    user: AuthUser,
+    axum::extract::Path(source_id): axum::extract::Path<i32>,
+    Form(payload): Form<MergeStationsForm>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let conn = pool.get().await.map_err(internal_error)?;
+    let user_id = user.user_id;
+    let target_id = payload.target_id;
+
+    if source_id == target_id {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Cannot merge station into itself".to_string(),
+        ));
+    }
+
+    conn.interact(move |conn| {
+        conn.transaction::<_, diesel::result::Error, _>(|conn| {
+            // Verify source station ownership
+            let source_exists = fuel_stations::table
+                .filter(fuel_stations::id.eq(source_id))
+                .filter(fuel_stations::user_id.eq(user_id))
+                .execute(conn)?
+                > 0;
+
+            if !source_exists {
+                return Err(diesel::result::Error::NotFound);
+            }
+
+            // Verify target station exists and is accessible
+            let target_exists = fuel_stations::table
+                .filter(fuel_stations::id.eq(target_id))
+                .filter(
+                    fuel_stations::user_id
+                        .eq(user_id)
+                        .or(fuel_stations::user_id.is_null()),
+                )
+                .execute(conn)?
+                > 0;
+
+            if !target_exists {
+                return Err(diesel::result::Error::NotFound);
+            }
+
+            // Update fuel entries
+            diesel::update(
+                crate::schema::fuel_entries::table
+                    .filter(crate::schema::fuel_entries::station_id.eq(source_id)),
+            )
+            .set(crate::schema::fuel_entries::station_id.eq(target_id))
+            .execute(conn)?;
+
+            // Delete source station
+            diesel::delete(fuel_stations::table.filter(fuel_stations::id.eq(source_id)))
+                .execute(conn)?;
+
+            Ok(())
+        })
+    })
+    .await
+    .map_err(internal_error)?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert("HX-Redirect", "/stations".parse().unwrap());
+    Ok((headers, Redirect::to("/stations")))
+}
+
 pub async fn delete_station(
     State(pool): State<Pool>,
     user: AuthUser,

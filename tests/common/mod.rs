@@ -81,6 +81,7 @@ pub async fn create_test_app(pool: Pool) -> Router {
             "/stations/{id}",
             post(handlers::update_station).delete(handlers::delete_station),
         )
+        .route("/stations/{id}/merge", post(handlers::merge_stations))
         .route("/stats", get(handlers::stats_page))
         .route("/import", get(handlers::import_page))
         .route("/htmx/import/preview", post(handlers::htmx_import_preview))
