@@ -345,4 +345,3 @@ async fn test_merge_stations() {
         .unwrap();
     assert_eq!(entry_station_id, Some(station2_id));
 }
-

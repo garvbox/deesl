@@ -138,7 +138,10 @@ async fn main() {
         )
         .route("/fuel-entries/{id}/edit", get(handlers::edit_fuel_entry))
         .route("/fuel-entries/{id}", post(handlers::update_fuel_entry))
-        .route("/stations", get(handlers::stations_page).post(handlers::create_station))
+        .route(
+            "/stations",
+            get(handlers::stations_page).post(handlers::create_station),
+        )
         .route("/stations/{id}", post(handlers::update_station))
         .route("/stations/{id}", delete(handlers::delete_station))
         .route("/stations/{id}/merge", post(handlers::merge_stations))
