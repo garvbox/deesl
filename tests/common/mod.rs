@@ -158,6 +158,8 @@ pub async fn create_test_user_db(pool: &Pool, email: &str) -> TestUser {
                     password_hash: None,
                     currency: "EUR".to_string(),
                     google_id: None,
+                    distance_unit: "km".to_string(),
+                    volume_unit: "L".to_string(),
                 })
                 .get_result(conn)
         })

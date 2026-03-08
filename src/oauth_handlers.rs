@@ -200,7 +200,12 @@ pub async fn google_callback(
             }
 
             diesel::insert_into(users::table)
-                .values((users::email.eq(&email), users::google_id.eq(&google_id)))
+                .values((
+                    users::email.eq(&email),
+                    users::google_id.eq(&google_id),
+                    users::distance_unit.eq("km"),
+                    users::volume_unit.eq("L"),
+                ))
                 .returning(User::as_returning())
                 .get_result(conn)
         })

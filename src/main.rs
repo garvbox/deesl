@@ -100,6 +100,8 @@ async fn main() {
                                     password_hash: None,
                                     google_id: None,
                                     currency: "EUR".to_string(),
+                                    distance_unit: "km".to_string(),
+                                    volume_unit: "L".to_string(),
                                 })
                                 .execute(conn);
                         }

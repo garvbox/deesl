@@ -33,7 +33,7 @@
             <div style="color: var(--text-muted); font-size: 0.875rem;">Total Entries</div>
         </div>
         <div class="card" style="text-align: center; margin-bottom: 0;">
-            <div style="font-size: 2rem; font-weight: 700; color: var(--primary);">{{ "{:.1}"|format(total_litres) }} L</div>
+            <div style="font-size: 2rem; font-weight: 700; color: var(--primary);">{{ "{:.1}"|format(total_litres) }} {{ volume_unit }}</div>
             <div style="color: var(--text-muted); font-size: 0.875rem;">Total Fuel</div>
         </div>
         <div class="card" style="text-align: center; margin-bottom: 0;">
@@ -42,7 +42,7 @@
         </div>
         <div class="card" style="text-align: center; margin-bottom: 0;">
             <div style="font-size: 2rem; font-weight: 700; color: var(--success);">{{ "{:.1}"|format(avg_efficiency) }}</div>
-            <div style="color: var(--text-muted); font-size: 0.875rem;">km/L (Avg)</div>
+            <div style="color: var(--text-muted); font-size: 0.875rem;">{{ distance_unit }}/{{ volume_unit }} (Avg)</div>
         </div>
     </div>
 
@@ -59,7 +59,7 @@
 
     <div class="card fade-in">
         <div class="card-header">
-            <div class="card-title">Cost Per km Over Time</div>
+            <div class="card-title">Cost Per {{ distance_unit }} Over Time</div>
         </div>
         <div style="position: relative; height: 300px;">
             <canvas id="costChart"></canvas>
@@ -68,7 +68,7 @@
 
     <div class="card fade-in">
         <div class="card-header">
-            <div class="card-title">Cost Per Litre Over Time</div>
+            <div class="card-title">Cost Per {{ volume_unit }} Over Time</div>
         </div>
         <div style="position: relative; height: 300px;">
             <canvas id="costPerLitreChart"></canvas>
@@ -107,13 +107,13 @@
                 scales: {
                     y: {
                         beginAtZero: true,
-                        title: { display: true, text: 'km/L' }
+                        title: { display: true, text: '{{ distance_unit }}/{{ volume_unit }}' }
                     }
                 }
             }
         });
 
-        // Cost Per km Chart with multiple series
+        // Cost Per {{ distance_unit }} Chart with multiple series
         const costCtx = document.getElementById('costChart').getContext('2d');
         new Chart(costCtx, {
             type: 'line',
@@ -144,13 +144,13 @@
                 scales: {
                     y: {
                         beginAtZero: true,
-                        title: { display: true, text: '€/km' }
+                        title: { display: true, text: '€/{{ distance_unit }}' }
                     }
                 }
             }
         });
 
-        // Cost Per Litre Chart with multiple series
+        // Cost Per {{ volume_unit }} Chart with multiple series
         const costPerLitreCtx = document.getElementById('costPerLitreChart').getContext('2d');
         new Chart(costPerLitreCtx, {
             type: 'line',
@@ -181,7 +181,7 @@
                 scales: {
                     y: {
                         beginAtZero: true,
-                        title: { display: true, text: '€/L' }
+                        title: { display: true, text: '€/{{ volume_unit }}' }
                     }
                 }
             }
@@ -210,9 +210,9 @@
                     <tr>
                         <th>Vehicle</th>
                         <th>Entries</th>
-                        <th>Total KM</th>
-                        <th>Total Litres</th>
-                        <th>Avg km/L</th>
+                        <th>Total {{ distance_unit }}</th>
+                        <th>Total {{ volume_unit }}</th>
+                        <th>Avg {{ distance_unit }}/{{ volume_unit }}</th>
                         <th>Total Cost</th>
                     </tr>
                 </thead>
@@ -225,7 +225,7 @@
                         </td>
                         <td>{{ v.total_entries }}</td>
                         <td>{{ "{:.0}"|format(v.total_km) }}</td>
-                        <td>{{ "{:.1}"|format(v.total_litres) }} L</td>
+                        <td>{{ "{:.1}"|format(v.total_litres) }} {{ volume_unit }}</td>
                         <td style="color: var(--success); font-weight: 600;">{{ "{:.1}"|format(v.avg_efficiency) }}</td>
                         <td>€{{ "{:.2}"|format(v.total_cost) }}</td>
                     </tr>

@@ -90,7 +90,11 @@ async fn test_settings_can_update_currency() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "settings_test").await;
 
-    let form = [("currency", "USD")];
+    let form = [
+        ("currency", "USD"),
+        ("distance_unit", "mi"),
+        ("volume_unit", "gal"),
+    ];
 
     let response = env
         .server

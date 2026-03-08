@@ -59,7 +59,7 @@
         <div style="color: var(--text-muted); font-size: 0.875rem;">Entries</div>
     </div>
     <div class="card" style="text-align: center; margin-bottom: 0;">
-        <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary);">{{ "{:.1}"|format(total_litres) }} L</div>
+        <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary);">{{ "{:.1}"|format(total_litres) }} {{ volume_unit }}</div>
         <div style="color: var(--text-muted); font-size: 0.875rem;">Total Fuel</div>
     </div>
     <div class="card" style="text-align: center; margin-bottom: 0;">
@@ -70,7 +70,7 @@
         <div style="font-size: 1.5rem; font-weight: 700; color: var(--success);">
             {% if total_litres > 0.0 %}€{{ "{:.3}"|format(total_cost / total_litres) }}{% else %}-{% endif %}
         </div>
-        <div style="color: var(--text-muted); font-size: 0.875rem;">Avg €/L</div>
+        <div style="color: var(--text-muted); font-size: 0.875rem;">Avg €/{{ volume_unit }}</div>
     </div>
 </div>
 {% endif %}
@@ -95,10 +95,10 @@
                         <th>Date</th>
                         <th>Vehicle</th>
                         <th>Station</th>
-                        <th>Mileage</th>
-                        <th>Litres</th>
+                        <th>Mileage ({{ distance_unit }})</th>
+                        <th>{{ volume_unit }}</th>
                         <th>Cost</th>
-                        <th>€/L</th>
+                        <th>€/{{ volume_unit }}</th>
                         <th style="text-align: right;">Actions</th>
                     </tr>
                 </thead>
@@ -117,8 +117,8 @@
                                 <span style="color: var(--text-muted); font-style: italic;">Unknown</span>
                             {% endif %}
                         </td>
-                        <td>{{ entry.mileage_km }} km</td>
-                        <td>{{ "{:.2}"|format(entry.litres) }} L</td>
+                        <td>{{ entry.mileage_km }} {{ distance_unit }}</td>
+                        <td>{{ "{:.2}"|format(entry.litres) }} {{ volume_unit }}</td>
                         <td>€{{ "{:.2}"|format(entry.cost) }}</td>
                         <td>€{{ "{:.3}"|format(entry.cost / entry.litres) }}</td>
                         <td style="text-align: right;">

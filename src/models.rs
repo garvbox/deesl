@@ -1,7 +1,7 @@
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 
-#[derive(Queryable, Selectable, serde::Serialize)]
+#[derive(Queryable, Selectable, serde::Serialize, AsChangeset)]
 #[diesel(table_name = crate::schema::users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct User {
@@ -11,6 +11,17 @@ pub struct User {
     pub created_at: NaiveDateTime,
     pub currency: String,
     pub google_id: Option<String>,
+    pub distance_unit: String,
+    pub volume_unit: String,
+}
+
+#[derive(AsChangeset, serde::Deserialize)]
+#[diesel(table_name = crate::schema::users)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct UpdateUser {
+    pub currency: Option<String>,
+    pub distance_unit: Option<String>,
+    pub volume_unit: Option<String>,
 }
 
 #[derive(Insertable, serde::Deserialize)]
@@ -21,6 +32,8 @@ pub struct NewUser {
     pub password_hash: Option<String>,
     pub currency: String,
     pub google_id: Option<String>,
+    pub distance_unit: String,
+    pub volume_unit: String,
 }
 
 #[derive(Queryable, Selectable, serde::Serialize, Clone)]

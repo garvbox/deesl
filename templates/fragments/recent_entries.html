@@ -11,7 +11,8 @@
                     <th>Date</th>
                     <th>Vehicle</th>
                     <th>Station</th>
-                    <th>Litres</th>
+                    <th>Mileage ({{ distance_unit }})</th>
+                    <th>{{ volume_unit }}</th>
                     <th>Cost</th>
                     <th style="text-align: right;">Actions</th>
                 </tr>
@@ -28,7 +29,8 @@
                             <span style="color: var(--text-muted); font-style: italic;">Unknown</span>
                         {% endif %}
                     </td>
-                    <td>{{ self.format_float(e.litres) }} L</td>
+                    <td>{{ e.mileage_km }} {{ distance_unit }}</td>
+                    <td>{{ self.format_float(e.litres) }} {{ volume_unit }}</td>
                     <td>€{{ self.format_float(e.cost) }}</td>
                     <td style="text-align: right;">
                         <a href="/fuel-entries/{{ e.id }}/edit" class="btn btn-small btn-outline">Edit</a>
