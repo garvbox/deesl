@@ -39,7 +39,71 @@ pub struct StatsTemplate {
     pub volume_unit: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
+pub struct ChartSeries {
+    pub vehicle_id: i32,
+    pub label: String,
+    pub color: String,
+    pub data: Vec<Option<f64>>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct ChartData {
+    pub labels: Vec<String>,
+    pub series: Vec<ChartSeries>,
+    pub show_legend: bool,
+    pub y_axis_label: String,
+    pub config_json: String,
+}
+
+impl ChartData {
+    pub fn new(labels: Vec<String>, series: Vec<ChartSeries>, y_axis_label: String) -> Self {
+        let show_legend = series.len() > 1;
+        let datasets_json: String = series
+            .iter()
+            .map(|s| {
+                let data_str = serde_json::to_string(&s.data).unwrap_or_default();
+                format!(
+                    r#"{{"label":"{}","data":{},"borderColor":"{}","backgroundColor":"{}","tension":0.4,"spanGaps":true}}"#,
+                    s.label, data_str, s.color, s.color
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let config_json = format!(
+            r#"{{"type":"line","data":{{"labels":{},"datasets":[{}]}},"options":{{"responsive":true,"maintainAspectRatio":false,"plugins":{{"legend":{{"display":{},"position":"bottom"}}}},"scales":{{"y":{{"beginAtZero":true,"title":{{"display":true,"text":"{}"}}}}}}}}"#,
+            serde_json::to_string(&labels).unwrap_or_default(),
+            datasets_json,
+            show_legend,
+            y_axis_label
+        );
+
+        ChartData {
+            labels,
+            series,
+            show_legend,
+            y_axis_label: y_axis_label.to_string(),
+            config_json,
+        }
+    }
+
+    pub fn empty() -> Self {
+        ChartData {
+            labels: vec![],
+            series: vec![],
+            show_legend: false,
+            y_axis_label: String::new(),
+            config_json: String::new(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.series.is_empty()
+    }
+}
+
+#[derive(Serialize, Clone)]
 pub struct VehicleStat {
     pub id: i32,
     pub registration: String,
@@ -50,20 +114,6 @@ pub struct VehicleStat {
     pub total_litres: f64,
     pub avg_efficiency: f64,
     pub total_cost: f64,
-}
-
-#[derive(Serialize, Clone)]
-pub struct ChartSeries {
-    pub vehicle_id: i32,
-    pub label: String,
-    pub color: String,
-    pub data: Vec<Option<f64>>, // None for dates where this vehicle has no entry
-}
-
-#[derive(Serialize, Clone)]
-pub struct ChartData {
-    pub labels: Vec<String>,
-    pub series: Vec<ChartSeries>,
 }
 
 pub async fn stats_page(
@@ -117,10 +167,7 @@ pub async fn stats_page(
         .await??;
 
     if entries.is_empty() {
-        let empty_chart = ChartData {
-            labels: vec![],
-            series: vec![],
-        };
+        let empty_chart = ChartData::empty();
         let template = StatsTemplate {
             logged_in: true,
             has_data: false,
@@ -263,20 +310,23 @@ pub async fn stats_page(
         });
     }
 
-    let efficiency_chart = ChartData {
-        labels: labels.clone(),
-        series: efficiency_series,
-    };
+    let efficiency_chart = ChartData::new(
+        labels.clone(),
+        efficiency_series,
+        format!("{}/{}", &db_user.distance_unit, &db_user.volume_unit),
+    );
 
-    let cost_per_km_chart = ChartData {
-        labels: labels.clone(),
-        series: cost_per_km_series,
-    };
+    let cost_per_km_chart = ChartData::new(
+        labels.clone(),
+        cost_per_km_series,
+        format!("€/{}", &db_user.distance_unit),
+    );
 
-    let cost_per_litre_chart = ChartData {
+    let cost_per_litre_chart = ChartData::new(
         labels,
-        series: cost_per_litre_series,
-    };
+        cost_per_litre_series,
+        format!("€/{}", &db_user.volume_unit),
+    );
 
     let vehicle_stats: Vec<VehicleStat> = aggregator
         .vehicle_stats
