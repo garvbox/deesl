@@ -14,7 +14,7 @@ use serde::Deserialize;
 use std::env;
 
 use crate::auth::extract_auth_user;
-use crate::handlers::internal_error;
+use crate::error::AppError;
 use crate::models::User;
 use crate::schema::users;
 use crate::state::AppState;
@@ -131,12 +131,12 @@ pub async fn google_callback(
     State(state): State<AppState>,
     req_headers: HeaderMap,
     axum::extract::Query(params): axum::extract::Query<CallbackParams>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let csrf_cookie = extract_cookie(&req_headers, CSRF_COOKIE)
-        .ok_or((StatusCode::BAD_REQUEST, "Missing CSRF cookie".to_string()))?;
+        .ok_or_else(|| AppError::BadRequest("Missing CSRF cookie".to_string()))?;
 
     if csrf_cookie != params.state {
-        return Err((StatusCode::BAD_REQUEST, "CSRF state mismatch".to_string()));
+        return Err(AppError::BadRequest("CSRF state mismatch".to_string()));
     }
 
     let token_result = state
@@ -145,36 +145,21 @@ pub async fn google_callback(
         .exchange_code(AuthorizationCode::new(params.code))
         .request_async(async_http_client)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Token exchange failed: {e}"),
-            )
-        })?;
+        .map_err(|e| AppError::Internal(format!("Token exchange failed: {e}")))?;
 
     let user_info: GoogleUserInfo = reqwest::Client::new()
         .get("https://www.googleapis.com/oauth2/v3/userinfo")
         .bearer_auth(token_result.access_token().secret())
         .send()
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to fetch user info: {e}"),
-            )
-        })?
+        .map_err(|e| AppError::Internal(format!("Failed to fetch user info: {e}")))?
         .json()
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to parse user info: {e}"),
-            )
-        })?;
+        .map_err(|e| AppError::Internal(format!("Failed to parse user info: {e}")))?;
 
     let google_id = user_info.sub.clone();
     let email = user_info.email.clone();
-    let conn = state.pool.get().await.map_err(internal_error)?;
+    let conn = state.pool.get().await?;
 
     let user: User = conn
         .interact(move |conn| {
@@ -209,23 +194,13 @@ pub async fn google_callback(
                 .returning(User::as_returning())
                 .get_result(conn)
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Database error: {e}"),
-            )
-        })?;
+        .await??;
 
-    let jwt = state.auth.create_token(user.id, &user.email).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to create token: {e}"),
-        )
-    })?;
+    let jwt = state
+        .auth
+        .create_token(user.id, &user.email)
+        .map_err(|e| AppError::Internal(format!("Failed to create token: {e}")))?;
 
-    // Clear CSRF cookie and set auth cookie with JWT
     let clear_csrf_cookie = build_clear_cookie(CSRF_COOKIE);
     let auth_cookie = build_cookie("auth_token", &jwt, 604800);
 
@@ -245,8 +220,7 @@ pub struct CurrentUserResponse {
 pub async fn get_current_user(
     State(state): State<AppState>,
     req_headers: HeaderMap,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    // Use extract_auth_user to support dev auth bypass
+) -> Result<impl IntoResponse, AppError> {
     let auth_user = extract_auth_user(&req_headers, &state.auth, &state.pool).await?;
 
     Ok(Json(CurrentUserResponse {

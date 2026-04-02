@@ -1,17 +1,17 @@
 use askama::Template;
 use axum::{
     Form, Router,
-    http::StatusCode,
     response::{Html, IntoResponse},
     routing::get,
 };
 use diesel::prelude::*;
 use serde::Deserialize;
 
-use super::{SUPPORTED_CURRENCIES, internal_error, validate_currency};
+use super::{SUPPORTED_CURRENCIES, validate_currency};
 use crate::AppState;
 use crate::auth::{AuthUser, AuthUserRedirect};
 use crate::db::DbConn;
+use crate::error::AppError;
 use crate::models::User;
 use crate::schema::users;
 
@@ -49,7 +49,7 @@ impl SettingsTemplate {
 pub async fn settings_page(
     DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
     let db_user: User = conn
@@ -58,9 +58,7 @@ pub async fn settings_page(
                 .filter(users::id.eq(user_id))
                 .first::<User>(conn)
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await??;
 
     let template = SettingsTemplate {
         logged_in: true,
@@ -70,7 +68,7 @@ pub async fn settings_page(
         current_distance_unit: db_user.distance_unit,
         current_volume_unit: db_user.volume_unit,
     };
-    Ok(Html(template.render().map_err(internal_error)?))
+    Ok(Html(template.render()?))
 }
 
 #[derive(Deserialize)]
@@ -88,15 +86,14 @@ pub async fn update_settings(
     DbConn(conn): DbConn,
     user: AuthUser,
     Form(payload): Form<UpdateSettingsForm>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     validate_currency(&payload.currency)?;
 
-    // Basic unit validation
     if !["km", "mi"].contains(&payload.distance_unit.as_str()) {
-        return Err((StatusCode::BAD_REQUEST, "Invalid distance unit".to_string()));
+        return Err(AppError::BadRequest("Invalid distance unit".to_string()));
     }
     if !["L", "gal"].contains(&payload.volume_unit.as_str()) {
-        return Err((StatusCode::BAD_REQUEST, "Invalid volume unit".to_string()));
+        return Err(AppError::BadRequest("Invalid volume unit".to_string()));
     }
 
     let user_id = user.user_id;
@@ -110,10 +107,8 @@ pub async fn update_settings(
             })
             .execute(conn)
     })
-    .await
-    .map_err(internal_error)?
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    .await??;
 
     let template = SettingsSuccessTemplate {};
-    Ok(Html(template.render().map_err(internal_error)?))
+    Ok(Html(template.render()?))
 }

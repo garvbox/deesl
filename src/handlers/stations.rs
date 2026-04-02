@@ -2,7 +2,6 @@ use askama::Template;
 use axum::{
     Form, Router,
     extract::Query,
-    http::StatusCode,
     response::{Html, IntoResponse},
     routing::{get, post},
 };
@@ -10,10 +9,11 @@ use diesel::prelude::*;
 use serde::Deserialize;
 use std::collections::HashMap;
 
-use super::{HxRedirect, fuzzy_match, internal_error};
+use super::{HxRedirect, fuzzy_match};
 use crate::AppState;
 use crate::auth::{AuthUser, AuthUserRedirect};
 use crate::db::DbConn;
+use crate::error::AppError;
 use crate::models::{FuelStation, NewFuelStation};
 use crate::schema::fuel_stations;
 
@@ -35,7 +35,7 @@ pub struct StationsTemplate {
 pub async fn stations_page(
     DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
     let stations: Vec<FuelStation> = conn
@@ -49,15 +49,13 @@ pub async fn stations_page(
                 .order(fuel_stations::name)
                 .load::<FuelStation>(conn)
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await??;
 
     let template = StationsTemplate {
         logged_in: true,
         stations,
     };
-    Ok(Html(template.render().map_err(internal_error)?))
+    Ok(Html(template.render()?))
 }
 
 #[derive(Deserialize)]
@@ -69,7 +67,7 @@ pub async fn create_station(
     DbConn(conn): DbConn,
     user: AuthUser,
     Form(payload): Form<CreateStationForm>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
     conn.interact(move |conn| {
@@ -80,9 +78,7 @@ pub async fn create_station(
             })
             .execute(conn)
     })
-    .await
-    .map_err(internal_error)?
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    .await??;
 
     Ok(HxRedirect("/stations"))
 }
@@ -97,7 +93,7 @@ pub async fn update_station(
     user: AuthUser,
     axum::extract::Path(station_id): axum::extract::Path<i32>,
     Form(payload): Form<UpdateStationForm>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
     let is_owner: bool = conn
@@ -109,13 +105,11 @@ pub async fn update_station(
                 .first::<i32>(conn)
                 .optional()
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .await??
         .is_some();
 
     if !is_owner {
-        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+        return Err(AppError::Forbidden("Access denied".to_string()));
     }
 
     conn.interact(move |conn| {
@@ -125,9 +119,7 @@ pub async fn update_station(
             })
             .execute(conn)
     })
-    .await
-    .map_err(internal_error)?
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    .await??;
 
     Ok(HxRedirect("/stations"))
 }
@@ -142,20 +134,18 @@ pub async fn merge_stations(
     user: AuthUser,
     axum::extract::Path(source_id): axum::extract::Path<i32>,
     Form(payload): Form<MergeStationsForm>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
     let target_id = payload.target_id;
 
     if source_id == target_id {
-        return Err((
-            StatusCode::BAD_REQUEST,
+        return Err(AppError::BadRequest(
             "Cannot merge station into itself".to_string(),
         ));
     }
 
     conn.interact(move |conn| {
         conn.transaction::<_, diesel::result::Error, _>(|conn| {
-            // Verify source station ownership
             let source_exists = fuel_stations::table
                 .filter(fuel_stations::id.eq(source_id))
                 .filter(fuel_stations::user_id.eq(user_id))
@@ -166,7 +156,6 @@ pub async fn merge_stations(
                 return Err(diesel::result::Error::NotFound);
             }
 
-            // Verify target station exists and is accessible
             let target_exists = fuel_stations::table
                 .filter(fuel_stations::id.eq(target_id))
                 .filter(
@@ -181,7 +170,6 @@ pub async fn merge_stations(
                 return Err(diesel::result::Error::NotFound);
             }
 
-            // Update fuel entries
             diesel::update(
                 crate::schema::fuel_entries::table
                     .filter(crate::schema::fuel_entries::station_id.eq(source_id)),
@@ -189,16 +177,13 @@ pub async fn merge_stations(
             .set(crate::schema::fuel_entries::station_id.eq(target_id))
             .execute(conn)?;
 
-            // Delete source station
             diesel::delete(fuel_stations::table.filter(fuel_stations::id.eq(source_id)))
                 .execute(conn)?;
 
             Ok(())
         })
     })
-    .await
-    .map_err(internal_error)?
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    .await??;
 
     Ok(HxRedirect("/stations"))
 }
@@ -207,7 +192,7 @@ pub async fn delete_station(
     DbConn(conn): DbConn,
     user: AuthUser,
     axum::extract::Path(station_id): axum::extract::Path<i32>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
     let is_owner: bool = conn
@@ -219,21 +204,17 @@ pub async fn delete_station(
                 .first::<i32>(conn)
                 .optional()
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .await??
         .is_some();
 
     if !is_owner {
-        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+        return Err(AppError::Forbidden("Access denied".to_string()));
     }
 
     conn.interact(move |conn| {
         diesel::delete(fuel_stations::table.filter(fuel_stations::id.eq(station_id))).execute(conn)
     })
-    .await
-    .map_err(internal_error)?
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    .await??;
 
     Ok(Html(""))
 }
@@ -249,7 +230,7 @@ pub async fn htmx_station_search(
     DbConn(conn): DbConn,
     user: AuthUser,
     Query(params): Query<HashMap<String, String>>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let query = params.get("q").cloned().unwrap_or_default();
     let query_lower = query.to_lowercase();
 
@@ -259,7 +240,6 @@ pub async fn htmx_station_search(
 
     let user_id = user.user_id;
 
-    // Fetch all stations for the user (user's own + global)
     let stations: Vec<FuelStation> = conn
         .interact(move |conn| {
             fuel_stations::table
@@ -271,26 +251,20 @@ pub async fn htmx_station_search(
                 .order(fuel_stations::name)
                 .load::<FuelStation>(conn)
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await??;
 
-    // Filter stations by fuzzy matching
     let filtered_stations: Vec<FuelStation> = stations
         .into_iter()
         .filter(|s| {
             let name_lower = s.name.to_lowercase();
-            // Check if query is a substring (case-insensitive)
-            name_lower.contains(&query_lower) ||
-            // Or if all query characters appear in order
-            fuzzy_match(&name_lower, &query_lower)
+            name_lower.contains(&query_lower) || fuzzy_match(&name_lower, &query_lower)
         })
-        .take(10) // Limit to 10 results
+        .take(10)
         .collect();
 
     let template = StationSearchResultsTemplate {
         stations: filtered_stations,
         query,
     };
-    Ok(Html(template.render().map_err(internal_error)?))
+    Ok(Html(template.render()?))
 }

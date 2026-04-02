@@ -1,19 +1,12 @@
 use axum::{
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     response::{IntoResponse, Redirect},
 };
 use diesel::prelude::*;
 
+use crate::error::AppError;
 use crate::models::Vehicle;
 use crate::schema::vehicles as vehicles_schema;
-
-/// Utility function for mapping any error into a `500 Internal Server Error`
-pub fn internal_error<E>(err: E) -> (StatusCode, String)
-where
-    E: std::fmt::Display,
-{
-    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
-}
 
 pub struct HxRedirect(pub &'static str);
 
@@ -27,18 +20,15 @@ impl IntoResponse for HxRedirect {
 
 pub const SUPPORTED_CURRENCIES: &[&str] = &["EUR", "GBP", "USD", "CAD", "AUD"];
 
-pub fn validate_currency(currency: &str) -> Result<(), (StatusCode, String)> {
+pub fn validate_currency(currency: &str) -> Result<(), AppError> {
     if SUPPORTED_CURRENCIES.contains(&currency) {
         Ok(())
     } else {
-        Err((
-            StatusCode::BAD_REQUEST,
-            format!(
-                "Unsupported currency '{}'. Must be one of: {}",
-                currency,
-                SUPPORTED_CURRENCIES.join(", ")
-            ),
-        ))
+        Err(AppError::BadRequest(format!(
+            "Unsupported currency '{}'. Must be one of: {}",
+            currency,
+            SUPPORTED_CURRENCIES.join(", ")
+        )))
     }
 }
 
@@ -46,7 +36,7 @@ pub async fn check_vehicle_write_access(
     conn: &deadpool_diesel::postgres::Object,
     user_id: i32,
     vehicle_id: i32,
-) -> Result<(), (StatusCode, String)> {
+) -> Result<(), AppError> {
     let has_write_access: (bool, bool) = conn
         .interact(move |conn| {
             let vehicle: Vehicle = vehicles_schema::table
@@ -70,22 +60,18 @@ pub async fn check_vehicle_write_access(
                 None => Ok((false, false)),
             }
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|_| (StatusCode::NOT_FOUND, "Vehicle not found".to_string()))?;
+        .await??;
 
     let (has_access, has_write) = has_write_access;
 
     if !has_access {
-        return Err((
-            StatusCode::FORBIDDEN,
+        return Err(AppError::Forbidden(
             "You don't have access to this vehicle".to_string(),
         ));
     }
 
     if !has_write {
-        return Err((
-            StatusCode::FORBIDDEN,
+        return Err(AppError::Forbidden(
             "You don't have write permission for this vehicle".to_string(),
         ));
     }
@@ -122,23 +108,6 @@ pub mod vehicles;
 mod tests {
     use super::*;
 
-    #[derive(Debug)]
-    struct TestError(String);
-
-    impl std::fmt::Display for TestError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}", self.0)
-        }
-    }
-
-    impl std::error::Error for TestError {}
-
-    #[test]
-    fn test_internal_error_returns_500_status() {
-        let (status, _) = internal_error(TestError("boom".to_string()));
-        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-    }
-
     #[test]
     fn test_validate_currency_accepts_all_supported_currencies() {
         for currency in SUPPORTED_CURRENCIES {
@@ -153,8 +122,8 @@ mod tests {
     fn test_validate_currency_rejects_unknown_currency() {
         let result = validate_currency("XYZ");
         assert!(result.is_err());
-        let (status, msg) = result.unwrap_err();
-        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let err = result.unwrap_err();
+        let msg = err.to_string();
         assert!(msg.contains("XYZ"));
         assert!(msg.contains("Must be one of"));
     }

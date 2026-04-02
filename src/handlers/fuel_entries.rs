@@ -2,7 +2,6 @@ use askama::Template;
 use axum::{
     Form, Router,
     extract::Query,
-    http::StatusCode,
     response::{Html, IntoResponse},
     routing::{delete, get, post},
 };
@@ -10,10 +9,11 @@ use diesel::prelude::*;
 use serde::Deserialize;
 use std::collections::HashMap;
 
-use super::{HxRedirect, check_vehicle_write_access, internal_error};
+use super::{HxRedirect, check_vehicle_write_access};
 use crate::AppState;
 use crate::auth::{AuthUser, AuthUserRedirect};
 use crate::db::DbConn;
+use crate::error::AppError;
 use crate::models::{FuelEntry, FuelStation, User, Vehicle};
 use crate::schema::{fuel_stations, users, vehicles};
 
@@ -41,7 +41,7 @@ pub struct AddFuelEntryTemplate {
 pub async fn new_fuel_entry(
     DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
     let (user_vehicles, user_stations, db_user): (Vec<Vehicle>, Vec<FuelStation>, User) = conn
@@ -61,13 +61,9 @@ pub async fn new_fuel_entry(
             let db_user = users::table
                 .filter(users::id.eq(user_id))
                 .first::<User>(conn)?;
-            Ok::<(Vec<Vehicle>, Vec<FuelStation>, User), diesel::result::Error>((
-                vehicles, stations, db_user,
-            ))
+            Ok::<_, diesel::result::Error>((vehicles, stations, db_user))
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await??;
 
     let template = AddFuelEntryTemplate {
         logged_in: true,
@@ -77,7 +73,7 @@ pub async fn new_fuel_entry(
         distance_unit: db_user.distance_unit,
         volume_unit: db_user.volume_unit,
     };
-    Ok(Html(template.render().map_err(internal_error)?))
+    Ok(Html(template.render()?))
 }
 
 #[derive(Deserialize)]
@@ -94,7 +90,7 @@ pub async fn create_fuel_entry(
     DbConn(conn): DbConn,
     user: AuthUser,
     Form(payload): Form<CreateFuelEntryForm>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let vehicle_id = payload.vehicle_id;
 
     check_vehicle_write_access(&conn, user.user_id, vehicle_id).await?;
@@ -115,9 +111,7 @@ pub async fn create_fuel_entry(
             })
             .execute(conn)
     })
-    .await
-    .map_err(internal_error)?
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    .await??;
 
     Ok(HxRedirect("/dashboard"))
 }
@@ -126,11 +120,10 @@ pub async fn htmx_delete_fuel_entry(
     DbConn(conn): DbConn,
     user: AuthUser,
     axum::extract::Path(id): axum::extract::Path<i32>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
-    // First check if entry exists and get vehicle_id
-    let vehicle_id: i32 = conn
+    let vehicle_id = conn
         .interact(move |conn| {
             crate::schema::fuel_entries::table
                 .filter(crate::schema::fuel_entries::id.eq(id))
@@ -138,23 +131,18 @@ pub async fn htmx_delete_fuel_entry(
                 .first::<i32>(conn)
                 .optional()
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Entry not found".to_string()))?;
+        .await??
+        .ok_or_else(|| AppError::NotFound("Entry not found".to_string()))?;
 
     check_vehicle_write_access(&conn, user_id, vehicle_id).await?;
 
-    // Delete the entry
     conn.interact(move |conn| {
         diesel::delete(
             crate::schema::fuel_entries::table.filter(crate::schema::fuel_entries::id.eq(id)),
         )
         .execute(conn)
     })
-    .await
-    .map_err(internal_error)?
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    .await??;
 
     Ok(Html(""))
 }
@@ -176,7 +164,7 @@ impl RecentEntriesTemplate {
 pub async fn htmx_recent_entries(
     DbConn(conn): DbConn,
     user: AuthUser,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
     let (entries, db_user): (
@@ -199,24 +187,16 @@ pub async fn htmx_recent_entries(
             let db_user = users::table
                 .filter(users::id.eq(user_id))
                 .first::<User>(conn)?;
-            Ok::<
-                (
-                    Vec<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)>,
-                    User,
-                ),
-                diesel::result::Error,
-            >((entries, db_user))
+            Ok::<_, diesel::result::Error>((entries, db_user))
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await??;
 
     let template = RecentEntriesTemplate {
         entries,
         distance_unit: db_user.distance_unit,
         volume_unit: db_user.volume_unit,
     };
-    Ok(Html(template.render().map_err(internal_error)?))
+    Ok(Html(template.render()?))
 }
 
 #[derive(Template)]
@@ -236,7 +216,7 @@ pub async fn edit_fuel_entry(
     DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
     axum::extract::Path(entry_id): axum::extract::Path<i32>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
     let (result, stations, db_user): (Option<(FuelEntry, Vehicle)>, Vec<FuelStation>, User) = conn
@@ -258,23 +238,17 @@ pub async fn edit_fuel_entry(
             let db_user = users::table
                 .filter(users::id.eq(user_id))
                 .first::<User>(conn)?;
-            Ok::<(Option<(FuelEntry, Vehicle)>, Vec<FuelStation>, User), diesel::result::Error>((
-                entry_result,
-                stations,
-                db_user,
-            ))
+            Ok::<_, diesel::result::Error>((entry_result, stations, db_user))
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await??;
 
-    let (entry, vehicle) = result.ok_or((StatusCode::NOT_FOUND, "Entry not found".to_string()))?;
+    let (entry, vehicle) =
+        result.ok_or_else(|| AppError::NotFound("Entry not found".to_string()))?;
 
     check_vehicle_write_access(&conn, user_id, vehicle.id).await?;
 
     let filled_at_formatted = entry.filled_at.format("%Y-%m-%dT%H:%M").to_string();
 
-    // Find the current station name
     let current_station_name = entry
         .station_id
         .and_then(|id| stations.iter().find(|s| s.id == id))
@@ -291,7 +265,7 @@ pub async fn edit_fuel_entry(
         distance_unit: db_user.distance_unit,
         volume_unit: db_user.volume_unit,
     };
-    Ok(Html(template.render().map_err(internal_error)?))
+    Ok(Html(template.render()?))
 }
 
 #[derive(Deserialize)]
@@ -308,10 +282,10 @@ pub async fn update_fuel_entry(
     user: AuthUser,
     axum::extract::Path(entry_id): axum::extract::Path<i32>,
     Form(payload): Form<UpdateFuelEntryForm>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
-    let vehicle_id: i32 = conn
+    let vehicle_id = conn
         .interact(move |conn| {
             crate::schema::fuel_entries::table
                 .filter(crate::schema::fuel_entries::id.eq(entry_id))
@@ -319,15 +293,13 @@ pub async fn update_fuel_entry(
                 .first::<i32>(conn)
                 .optional()
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Entry not found".to_string()))?;
+        .await??
+        .ok_or_else(|| AppError::NotFound("Entry not found".to_string()))?;
 
     check_vehicle_write_access(&conn, user_id, vehicle_id).await?;
 
     let filled_at = chrono::NaiveDateTime::parse_from_str(&payload.filled_at, "%Y-%m-%dT%H:%M")
-        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid date format".to_string()))?;
+        .map_err(|_| AppError::BadRequest("Invalid date format".to_string()))?;
 
     conn.interact(move |conn| {
         diesel::update(
@@ -342,9 +314,7 @@ pub async fn update_fuel_entry(
         })
         .execute(conn)
     })
-    .await
-    .map_err(internal_error)?
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    .await??;
 
     Ok(HxRedirect("/dashboard"))
 }
@@ -371,16 +341,14 @@ pub async fn fuel_entries_page(
     DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
     Query(params): Query<HashMap<String, String>>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
-    // Parse filter parameters
     let filter_vehicle_id = params.get("vehicle_id").and_then(|v| v.parse::<i32>().ok());
     let filter_station_id = params.get("station_id").and_then(|v| v.parse::<i32>().ok());
     let filter_date_from = params.get("date_from").cloned().unwrap_or_default();
     let filter_date_to = params.get("date_to").cloned().unwrap_or_default();
 
-    // Fetch all vehicles for the user (for filter dropdown)
     let vehicles: Vec<Vehicle> = conn
         .interact(move |conn| {
             vehicles::table
@@ -388,11 +356,8 @@ pub async fn fuel_entries_page(
                 .order(vehicles::registration)
                 .load::<Vehicle>(conn)
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await??;
 
-    // Fetch all stations for the user (for filter dropdown)
     let stations: Vec<FuelStation> = conn
         .interact(move |conn| {
             fuel_stations::table
@@ -404,26 +369,19 @@ pub async fn fuel_entries_page(
                 .order(fuel_stations::name)
                 .load::<FuelStation>(conn)
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await??;
 
-    // Fetch user for unit preferences
     let db_user: User = conn
         .interact(move |conn| {
             users::table
                 .filter(users::id.eq(user_id))
                 .first::<User>(conn)
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await??;
 
-    // Clone date filters for the closure
     let filter_date_from_clone = filter_date_from.clone();
     let filter_date_to_clone = filter_date_to.clone();
 
-    // Fetch fuel entries with filters
     let entries: Vec<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)> = conn
         .interact(move |conn| {
             let mut query = crate::schema::fuel_entries::table
@@ -432,17 +390,14 @@ pub async fn fuel_entries_page(
                 .filter(vehicles::owner_id.eq(user_id))
                 .into_boxed();
 
-            // Apply vehicle filter
             if let Some(vid) = filter_vehicle_id {
                 query = query.filter(crate::schema::fuel_entries::vehicle_id.eq(vid));
             }
 
-            // Apply station filter
             if let Some(sid) = filter_station_id {
                 query = query.filter(crate::schema::fuel_entries::station_id.eq(sid));
             }
 
-            // Apply date filters
             if !filter_date_from_clone.is_empty()
                 && let Ok(date) =
                     chrono::NaiveDate::parse_from_str(&filter_date_from_clone, "%Y-%m-%d")
@@ -468,11 +423,8 @@ pub async fn fuel_entries_page(
                 ))
                 .load::<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)>(conn)
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await??;
 
-    // Calculate totals
     let total_entries = entries.len();
     let total_litres: f64 = entries.iter().map(|(e, _, _)| e.litres).sum();
     let total_cost: f64 = entries.iter().map(|(e, _, _)| e.cost).sum();
@@ -493,5 +445,5 @@ pub async fn fuel_entries_page(
         volume_unit: db_user.volume_unit,
     };
 
-    Ok(Html(template.render().map_err(internal_error)?))
+    Ok(Html(template.render()?))
 }

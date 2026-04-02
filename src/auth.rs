@@ -1,6 +1,6 @@
 use axum::{
     extract::{FromRef, FromRequestParts},
-    http::{HeaderMap, StatusCode, request::Parts},
+    http::{HeaderMap, request::Parts},
     response::Redirect,
 };
 use deadpool_diesel::postgres::Pool;
@@ -8,7 +8,7 @@ use diesel::prelude::*;
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 
-use crate::handlers::internal_error;
+use crate::error::AppError;
 use crate::oauth_handlers::extract_cookie;
 use crate::schema::users;
 
@@ -91,7 +91,7 @@ where
     Pool: FromRef<S>,
     S: Send + Sync,
 {
-    type Rejection = (StatusCode, String);
+    type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let auth_config = AuthConfig::from_ref(state);
@@ -135,22 +135,20 @@ pub async fn extract_auth_user(
     headers: &HeaderMap,
     auth_config: &AuthConfig,
     pool: &Pool,
-) -> Result<AuthUser, (StatusCode, String)> {
-    // Dev bypass for local testing - simplified: just set DEV_AUTH_EMAIL
+) -> Result<AuthUser, AppError> {
     if let Some(email) = is_dev_auth_bypass_allowed(headers) {
         return Ok(AuthUser { user_id: 1, email });
     }
 
     let token = extract_cookie(headers, "auth_token")
-        .ok_or((StatusCode::UNAUTHORIZED, "Missing auth token".to_string()))?;
+        .ok_or_else(|| AppError::Unauthorized("Missing auth token".to_string()))?;
 
     let claims = auth_config
         .validate_token(&token)
-        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
+        .map_err(|_| AppError::Unauthorized("Invalid token".to_string()))?;
 
-    // Security hardening: verify user still exists in DB
     let user_id = claims.user_id;
-    let conn = pool.get().await.map_err(internal_error)?;
+    let conn = pool.get().await?;
     let user_exists = conn
         .interact(move |conn| {
             users::table
@@ -159,16 +157,11 @@ pub async fn extract_auth_user(
                 .first::<i32>(conn)
                 .optional()
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .await??
         .is_some();
 
     if !user_exists {
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            "User no longer exists".to_string(),
-        ));
+        return Err(AppError::Unauthorized("User no longer exists".to_string()));
     }
 
     Ok(AuthUser {
