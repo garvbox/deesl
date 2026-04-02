@@ -81,6 +81,9 @@ When set, all requests from localhost are treated as authenticated.
 
 ## Key Patterns
 
+### Version Bumps
+When bumping the version in `Cargo.toml`, always run `cargo check` or `cargo build` afterward to verify the change compiles correctly before committing.
+
 ### HTMX Partial Update Handler
 ```rust
 pub async fn htmx_list_items(user: AuthUser, State(pool): State<Pool>) -> Result<impl IntoResponse, (StatusCode, String)> {

@@ -13,7 +13,7 @@ use crate::AppState;
 use crate::auth::AuthUserRedirect;
 use crate::db::DbConn;
 use crate::error::AppError;
-use crate::models::{FuelStation, User, Vehicle};
+use crate::models::{StatsAggregator, User, Vehicle};
 use crate::schema::{users, vehicles};
 
 pub fn router() -> Router<AppState> {
@@ -85,11 +85,15 @@ pub async fn stats_page(
         _ => None,
     };
 
-    let entries: Vec<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)> = conn
+    let entries: Vec<(crate::models::FuelEntry, Vehicle)> = conn
         .interact(move |conn| {
+            crate::schema::fuel_entries::table
+                .inner_join(vehicles::table)
+                .filter(vehicles::owner_id.eq(user_id))
+                .into_boxed();
+
             let mut query = crate::schema::fuel_entries::table
                 .inner_join(vehicles::table)
-                .left_join(crate::schema::fuel_stations::table)
                 .filter(vehicles::owner_id.eq(user_id))
                 .into_boxed();
 
@@ -99,12 +103,8 @@ pub async fn stats_page(
 
             query
                 .order(crate::schema::fuel_entries::filled_at.asc())
-                .select((
-                    crate::models::FuelEntry::as_select(),
-                    Vehicle::as_select(),
-                    Option::<FuelStation>::as_select(),
-                ))
-                .load::<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)>(conn)
+                .select((crate::models::FuelEntry::as_select(), Vehicle::as_select()))
+                .load::<(crate::models::FuelEntry, Vehicle)>(conn)
         })
         .await??;
 
@@ -141,20 +141,15 @@ pub async fn stats_page(
         return Ok(Html(template.render()?));
     }
 
-    let total_entries = entries.len();
-    let total_litres: f64 = entries.iter().map(|(e, _, _)| e.litres).sum();
-    let total_cost: f64 = entries.iter().map(|(e, _, _)| e.cost).sum();
-
-    let mut vehicle_data: HashMap<
-        i32,
-        Vec<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)>,
-    > = HashMap::new();
-    for (entry, vehicle, station) in entries {
+    let mut vehicle_data: HashMap<i32, Vec<(crate::models::FuelEntry, Vehicle)>> = HashMap::new();
+    for (entry, vehicle) in entries {
         vehicle_data
             .entry(vehicle.id)
             .or_default()
-            .push((entry, vehicle.clone(), station));
+            .push((entry, vehicle));
     }
+
+    let aggregator = StatsAggregator::calculate(&vehicle_data);
 
     let vehicle_colors = [
         "rgb(59, 130, 246)",
@@ -165,33 +160,21 @@ pub async fn stats_page(
         "rgb(14, 165, 233)",
     ];
 
-    let mut vehicle_stats = Vec::new();
     let mut all_dates: Vec<String> = Vec::new();
     let mut vehicle_chart_data: HashMap<i32, Vec<(String, f64, f64, f64)>> = HashMap::new();
 
-    for (vehicle_id, vehicle_entries) in vehicle_data.iter() {
-        let vehicle = &vehicle_entries[0].1;
-        let mut total_km = 0.0;
-        let mut vehicle_litres = 0.0;
-        let mut vehicle_cost = 0.0;
+    for vs in &aggregator.vehicle_stats {
+        let entries: Vec<&crate::models::FuelEntry> = vs.entries.iter().collect();
         let mut prev_mileage: Option<i32> = None;
-        let mut efficiency_sum = 0.0;
-        let mut efficiency_count = 0;
         let mut vehicle_points: Vec<(String, f64, f64, f64)> = Vec::new();
 
-        for (entry, _, _) in vehicle_entries.iter() {
-            vehicle_litres += entry.litres;
-            vehicle_cost += entry.cost;
-
+        for entry in &entries {
             if let Some(prev) = prev_mileage {
-                let km = (entry.mileage_km - prev) as f64;
+                let km = entry.km_since(prev);
                 if km > 0.0 && entry.litres > 0.0 {
-                    let efficiency = km / entry.litres;
-                    let cost_per_km = entry.cost / km;
-                    let cost_per_litre = entry.cost / entry.litres;
-                    efficiency_sum += efficiency;
-                    efficiency_count += 1;
-                    total_km += km;
+                    let efficiency = entry.efficiency_km_per_litre(prev);
+                    let cost_per_km = entry.cost_per_km(prev);
+                    let cost_per_litre = entry.cost_per_litre();
 
                     let date_label = entry.filled_at.format("%Y-%m-%d").to_string();
                     vehicle_points.push((
@@ -209,25 +192,7 @@ pub async fn stats_page(
             prev_mileage = Some(entry.mileage_km);
         }
 
-        let avg_efficiency = if efficiency_count > 0 {
-            efficiency_sum / efficiency_count as f64
-        } else {
-            0.0
-        };
-
-        vehicle_stats.push(VehicleStat {
-            id: *vehicle_id,
-            registration: vehicle.registration.clone(),
-            make: vehicle.make.clone(),
-            model: vehicle.model.clone(),
-            total_entries: vehicle_entries.len() as i64,
-            total_km,
-            total_litres: vehicle_litres,
-            avg_efficiency,
-            total_cost: vehicle_cost,
-        });
-
-        vehicle_chart_data.insert(*vehicle_id, vehicle_points);
+        vehicle_chart_data.insert(vs.vehicle.id, vehicle_points);
     }
 
     all_dates.sort();
@@ -244,12 +209,12 @@ pub async fn stats_page(
     let mut cost_per_km_series: Vec<ChartSeries> = Vec::new();
     let mut cost_per_litre_series: Vec<ChartSeries> = Vec::new();
 
-    for (idx, vehicle_stat) in vehicle_stats.iter().enumerate() {
+    for (idx, vs) in aggregator.vehicle_stats.iter().enumerate() {
         let color = vehicle_colors
             .get(idx % vehicle_colors.len())
             .unwrap_or(&"rgb(107, 114, 128)");
         let vehicle_points = vehicle_chart_data
-            .get(&vehicle_stat.id)
+            .get(&vs.vehicle.id)
             .cloned()
             .unwrap_or_default();
 
@@ -274,24 +239,24 @@ pub async fn stats_page(
             }
         }
 
-        let label_text = format!("{} {}", vehicle_stat.make, vehicle_stat.model);
+        let label_text = vs.vehicle.display_name();
 
         efficiency_series.push(ChartSeries {
-            vehicle_id: vehicle_stat.id,
+            vehicle_id: vs.vehicle.id,
             label: label_text.clone(),
             color: color.to_string(),
             data: eff_data,
         });
 
         cost_per_km_series.push(ChartSeries {
-            vehicle_id: vehicle_stat.id,
+            vehicle_id: vs.vehicle.id,
             label: label_text.clone(),
             color: color.to_string(),
             data: cpk_data,
         });
 
         cost_per_litre_series.push(ChartSeries {
-            vehicle_id: vehicle_stat.id,
+            vehicle_id: vs.vehicle.id,
             label: label_text,
             color: color.to_string(),
             data: cpl_data,
@@ -313,33 +278,31 @@ pub async fn stats_page(
         series: cost_per_litre_series,
     };
 
-    let avg_efficiency = if !vehicle_stats.is_empty() {
-        vehicle_stats.iter().map(|v| v.avg_efficiency).sum::<f64>() / vehicle_stats.len() as f64
-    } else {
-        0.0
-    };
-
-    let avg_cost_per_km = if !vehicle_stats.is_empty() {
-        let total_km: f64 = vehicle_stats.iter().map(|v| v.total_km).sum();
-        let total_cost_sum: f64 = vehicle_stats.iter().map(|v| v.total_cost).sum();
-        if total_km > 0.0 {
-            total_cost_sum / total_km
-        } else {
-            0.0
-        }
-    } else {
-        0.0
-    };
+    let vehicle_stats: Vec<VehicleStat> = aggregator
+        .vehicle_stats
+        .into_iter()
+        .map(|vs| VehicleStat {
+            id: vs.vehicle.id,
+            registration: vs.vehicle.registration,
+            make: vs.vehicle.make,
+            model: vs.vehicle.model,
+            total_entries: vs.total_entries,
+            total_km: vs.total_km,
+            total_litres: vs.total_litres,
+            avg_efficiency: vs.avg_efficiency,
+            total_cost: vs.total_cost,
+        })
+        .collect();
 
     let template = StatsTemplate {
         logged_in: true,
         has_data: true,
         period: period.clone(),
-        total_entries,
-        total_litres,
-        total_cost,
-        avg_efficiency,
-        avg_cost_per_km,
+        total_entries: aggregator.total_entries,
+        total_litres: aggregator.total_litres,
+        total_cost: aggregator.total_cost,
+        avg_efficiency: aggregator.avg_efficiency,
+        avg_cost_per_km: aggregator.avg_cost_per_km,
         vehicle_stats,
         efficiency_chart,
         cost_per_km_chart,
