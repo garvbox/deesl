@@ -2,7 +2,6 @@ use askama::Template;
 use axum::{
     Form, Router,
     extract::Multipart,
-    http::StatusCode,
     response::{Html, IntoResponse},
     routing::{get, post},
 };
@@ -11,10 +10,11 @@ use diesel::prelude::*;
 use serde::Serialize;
 use std::collections::HashMap;
 
-use super::{check_vehicle_write_access, internal_error};
+use super::check_vehicle_write_access;
 use crate::AppState;
 use crate::auth::{AuthUser, AuthUserRedirect};
 use crate::db::DbConn;
+use crate::error::AppError;
 use crate::models::{FuelStation, NewFuelStation, Vehicle};
 use crate::schema::{fuel_stations, vehicles};
 
@@ -57,13 +57,13 @@ pub async fn perform_import(
     vehicle_id: i32,
     csv_data: Vec<u8>,
     mappings: HashMap<String, String>,
-) -> Result<ImportResult, (StatusCode, String)> {
+) -> Result<ImportResult, AppError> {
     check_vehicle_write_access(conn, user_id, vehicle_id).await?;
 
     let mut reader = csv::Reader::from_reader(&csv_data[..]);
     let headers: Vec<String> = reader
         .headers()
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("CSV parse error: {}", e)))?
+        .map_err(|e| AppError::BadRequest(format!("CSV parse error: {}", e)))?
         .iter()
         .map(|s| s.to_string())
         .collect();
@@ -202,14 +202,7 @@ pub async fn perform_import(
                         .collect::<HashMap<_, _>>()
                 })
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("DB error: {}", e),
-            )
-        })?;
+        .await??;
 
     let mut stations_to_create: Vec<StationOp> = Vec::new();
     let stations_map = existing_stations;
@@ -319,14 +312,7 @@ pub async fn perform_import(
                 Ok((imported, skipped, stations_created, row_errors))
             })
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Transaction failed: {}", e),
-            )
-        })?;
+        .await??;
 
     let (imported, skipped, stations_created, mut row_errors) = result;
     let mut all_errors = parse_errors;
@@ -352,7 +338,7 @@ pub struct ImportTemplate {
 pub async fn import_page(
     DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
     let user_vehicles: Vec<Vehicle> = conn
@@ -362,15 +348,13 @@ pub async fn import_page(
                 .order(vehicles::registration)
                 .load::<Vehicle>(conn)
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await??;
 
     let template = ImportTemplate {
         logged_in: true,
         vehicles: user_vehicles,
     };
-    Ok(Html(template.render().map_err(internal_error)?))
+    Ok(Html(template.render()?))
 }
 
 #[derive(Template)]
@@ -396,33 +380,34 @@ pub async fn htmx_import_preview(
     DbConn(conn): DbConn,
     user: AuthUser,
     mut multipart: Multipart,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let mut csv_data: Option<Vec<u8>> = None;
     let mut vehicle_id: Option<i32> = None;
 
-    while let Some(field) = multipart.next_field().await.map_err(internal_error)? {
+    while let Some(field) = multipart.next_field().await? {
         let name = field.name().unwrap_or("").to_string();
-        let data = field.bytes().await.map_err(internal_error)?;
+        let data = field.bytes().await?;
 
         match name.as_str() {
             "file" => csv_data = Some(data.to_vec()),
             "vehicle_id" => {
-                vehicle_id =
-                    Some(String::from_utf8_lossy(&data).trim().parse().map_err(|_| {
-                        (StatusCode::BAD_REQUEST, "Invalid vehicle_id".to_string())
-                    })?);
+                vehicle_id = Some(
+                    String::from_utf8_lossy(&data)
+                        .trim()
+                        .parse()
+                        .map_err(|_| AppError::BadRequest("Invalid vehicle_id".to_string()))?,
+                );
             }
             _ => {}
         }
     }
 
     let vehicle_id =
-        vehicle_id.ok_or((StatusCode::BAD_REQUEST, "vehicle_id required".to_string()))?;
-    let csv_data = csv_data.ok_or((StatusCode::BAD_REQUEST, "No file uploaded".to_string()))?;
+        vehicle_id.ok_or_else(|| AppError::BadRequest("vehicle_id required".to_string()))?;
+    let csv_data = csv_data.ok_or_else(|| AppError::BadRequest("No file uploaded".to_string()))?;
 
     check_vehicle_write_access(&conn, user.user_id, vehicle_id).await?;
 
-    // Clean up any old imports for this user first
     let user_id = user.user_id;
     let _ = conn
         .interact(move |conn| {
@@ -436,10 +421,8 @@ pub async fn htmx_import_preview(
             )
             .execute(conn)
         })
-        .await
-        .map_err(internal_error)?;
+        .await??;
 
-    // Store CSV in temp_imports table
     let csv_data_clone = csv_data.clone();
     let temp_import: crate::models::TempImport = conn
         .interact(move |conn| {
@@ -451,14 +434,12 @@ pub async fn htmx_import_preview(
                 })
                 .get_result(conn)
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await??;
 
     let mut reader = csv::Reader::from_reader(&csv_data[..]);
     let headers: Vec<String> = reader
         .headers()
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("CSV parse error: {}", e)))?
+        .map_err(|e| AppError::BadRequest(format!("CSV parse error: {}", e)))?
         .iter()
         .map(|s| s.to_string())
         .collect();
@@ -467,7 +448,7 @@ pub async fn htmx_import_preview(
         .records()
         .next()
         .transpose()
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("CSV parse error: {}", e)))?
+        .map_err(|e| AppError::BadRequest(format!("CSV parse error: {}", e)))?
         .map(|r| r.iter().map(|s| s.to_string()).collect::<Vec<_>>())
         .unwrap_or_else(|| vec!["".to_string(); headers.len()]);
 
@@ -501,7 +482,7 @@ pub async fn htmx_import_preview(
         sample_data: record,
         suggested_mappings,
     };
-    Ok(Html(template.render().map_err(internal_error)?))
+    Ok(Html(template.render()?))
 }
 
 #[derive(Template)]
@@ -519,51 +500,37 @@ pub async fn htmx_import_execute(
     DbConn(conn): DbConn,
     user: AuthUser,
     Form(payload): Form<std::collections::HashMap<String, String>>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
-    // Extract import_id and vehicle_id from form
     let import_id = payload
         .get("import_id")
-        .ok_or((StatusCode::BAD_REQUEST, "import_id required".to_string()))?;
+        .ok_or_else(|| AppError::BadRequest("import_id required".to_string()))?;
     let vehicle_id = payload
         .get("vehicle_id")
-        .ok_or((StatusCode::BAD_REQUEST, "vehicle_id required".to_string()))?
+        .ok_or_else(|| AppError::BadRequest("vehicle_id required".to_string()))?
         .parse::<i32>()
-        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid vehicle_id".to_string()))?;
+        .map_err(|_| AppError::BadRequest("Invalid vehicle_id".to_string()))?;
 
-    // Parse import_id as UUID
-    let import_uuid = uuid::Uuid::parse_str(import_id).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "Invalid import_id format".to_string(),
-        )
-    })?;
+    let import_uuid = uuid::Uuid::parse_str(import_id)
+        .map_err(|_| AppError::BadRequest("Invalid import_id format".to_string()))?;
 
-    // Retrieve CSV data from temp_imports table and verify ownership
     let temp_import: crate::models::TempImport = conn
         .interact(move |conn| {
             crate::schema::temp_imports::table
                 .filter(crate::schema::temp_imports::id.eq(import_uuid))
                 .filter(crate::schema::temp_imports::user_id.eq(user_id))
                 .first::<crate::models::TempImport>(conn)
+                .optional()
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|_| {
-            (
-                StatusCode::NOT_FOUND,
-                "Import not found or expired".to_string(),
-            )
-        })?;
+        .await??
+        .ok_or_else(|| AppError::NotFound("Import not found or expired".to_string()))?;
 
-    // Build mappings from form data
     let mut actual_mappings: HashMap<String, String> = HashMap::new();
-    let mut used_targets: HashMap<String, String> = HashMap::new(); // target -> column
+    let mut used_targets: HashMap<String, String> = HashMap::new();
     let mut i = 0;
     while let Some(col_name) = payload.get(&format!("col_{}", i)) {
         if let Some(target_field) = payload.get(&format!("map_{}", i)).filter(|s| !s.is_empty()) {
-            // Check if this target is already mapped to a different column
             if let Some(existing_col) = used_targets.get(target_field)
                 && existing_col != col_name
             {
@@ -578,7 +545,7 @@ pub async fn htmx_import_execute(
                         target_field, existing_col, col_name
                     )],
                 };
-                return Ok(Html(template.render().map_err(internal_error)?));
+                return Ok(Html(template.render()?));
             }
             used_targets.insert(target_field.clone(), col_name.clone());
             actual_mappings.insert(target_field.clone(), col_name.clone());
@@ -586,11 +553,9 @@ pub async fn htmx_import_execute(
         i += 1;
     }
 
-    // Perform the import
     let csv_data = temp_import.csv_data;
     let result = perform_import(&conn, user.user_id, vehicle_id, csv_data, actual_mappings).await?;
 
-    // Clean up the temp import after successful/failed execution
     let import_uuid_clone = import_uuid;
     let _ = conn
         .interact(move |conn| {
@@ -600,8 +565,7 @@ pub async fn htmx_import_execute(
             )
             .execute(conn)
         })
-        .await
-        .map_err(internal_error)?;
+        .await??;
 
     let template = if result.total_errors > 0 && result.imported == 0 {
         ImportResultTemplate {
@@ -623,7 +587,7 @@ pub async fn htmx_import_execute(
         }
     };
 
-    Ok(Html(template.render().map_err(internal_error)?))
+    Ok(Html(template.render()?))
 }
 
 fn normalize_station_name(name: &str) -> String {

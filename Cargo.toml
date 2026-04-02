@@ -1,6 +1,6 @@
 [package]
 name = "deesl"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2024"
 
 [lib]
@@ -17,6 +17,7 @@ axum = { version = "0.8.8", features = ["json", "tokio", "form", "multipart"] }
 axum-extra = { version = "0.10", features = ["typed-header"] }
 chrono = { version = "0.4.44", features = ["serde"] }
 csv = "1.4"
+deadpool = "0.6"
 deadpool-diesel = { version = "0.6.1", features = ["postgres"] }
 diesel = { version = "2.3.6", features = ["postgres", "chrono", "uuid"] }
 diesel_migrations = { version = "2.2.0", features = ["postgres"] }

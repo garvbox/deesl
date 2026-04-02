@@ -2,7 +2,6 @@ use askama::Template;
 use axum::{
     Router,
     extract::Query,
-    http::StatusCode,
     response::{Html, IntoResponse},
     routing::get,
 };
@@ -10,10 +9,10 @@ use diesel::prelude::*;
 use serde::Serialize;
 use std::collections::HashMap;
 
-use super::internal_error;
 use crate::AppState;
 use crate::auth::AuthUserRedirect;
 use crate::db::DbConn;
+use crate::error::AppError;
 use crate::models::{FuelStation, User, Vehicle};
 use crate::schema::{users, vehicles};
 
@@ -71,10 +70,9 @@ pub async fn stats_page(
     DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
     Query(params): Query<HashMap<String, String>>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
-    // Parse time period (default to "all")
     let period = params
         .get("period")
         .cloned()
@@ -84,10 +82,9 @@ pub async fn stats_page(
         "30d" => Some(chrono::Utc::now().naive_utc() - chrono::Duration::days(30)),
         "90d" => Some(chrono::Utc::now().naive_utc() - chrono::Duration::days(90)),
         "1y" => Some(chrono::Utc::now().naive_utc() - chrono::Duration::days(365)),
-        _ => None, // "all" or invalid
+        _ => None,
     };
 
-    // Get all fuel entries for the user's vehicles with vehicle and station info
     let entries: Vec<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)> = conn
         .interact(move |conn| {
             let mut query = crate::schema::fuel_entries::table
@@ -109,9 +106,7 @@ pub async fn stats_page(
                 ))
                 .load::<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)>(conn)
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await??;
 
     let db_user: User = conn
         .interact(move |conn| {
@@ -119,9 +114,7 @@ pub async fn stats_page(
                 .filter(users::id.eq(user_id))
                 .first::<User>(conn)
         })
-        .await
-        .map_err(internal_error)?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await??;
 
     if entries.is_empty() {
         let empty_chart = ChartData {
@@ -145,15 +138,13 @@ pub async fn stats_page(
             volume_unit: db_user.volume_unit,
         };
 
-        return Ok(Html(template.render().map_err(internal_error)?));
+        return Ok(Html(template.render()?));
     }
 
-    // Calculate overall stats
     let total_entries = entries.len();
     let total_litres: f64 = entries.iter().map(|(e, _, _)| e.litres).sum();
     let total_cost: f64 = entries.iter().map(|(e, _, _)| e.cost).sum();
 
-    // Group entries by vehicle
     let mut vehicle_data: HashMap<
         i32,
         Vec<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)>,
@@ -165,20 +156,18 @@ pub async fn stats_page(
             .push((entry, vehicle.clone(), station));
     }
 
-    // Vehicle colors for charts
     let vehicle_colors = [
-        "rgb(59, 130, 246)", // Blue
-        "rgb(16, 185, 129)", // Green
-        "rgb(139, 92, 246)", // Purple
-        "rgb(245, 158, 11)", // Orange
-        "rgb(239, 68, 68)",  // Red
-        "rgb(14, 165, 233)", // Sky
+        "rgb(59, 130, 246)",
+        "rgb(16, 185, 129)",
+        "rgb(139, 92, 246)",
+        "rgb(245, 158, 11)",
+        "rgb(239, 68, 68)",
+        "rgb(14, 165, 233)",
     ];
 
-    // Calculate vehicle stats and collect all unique dates
     let mut vehicle_stats = Vec::new();
     let mut all_dates: Vec<String> = Vec::new();
-    let mut vehicle_chart_data: HashMap<i32, Vec<(String, f64, f64, f64)>> = HashMap::new(); // vehicle_id -> [(date, efficiency, cost_per_km, cost_per_litre)]
+    let mut vehicle_chart_data: HashMap<i32, Vec<(String, f64, f64, f64)>> = HashMap::new();
 
     for (vehicle_id, vehicle_entries) in vehicle_data.iter() {
         let vehicle = &vehicle_entries[0].1;
@@ -241,7 +230,6 @@ pub async fn stats_page(
         vehicle_chart_data.insert(*vehicle_id, vehicle_points);
     }
 
-    // Sort dates and take last 20
     all_dates.sort();
     let labels: Vec<String> = all_dates
         .into_iter()
@@ -252,7 +240,6 @@ pub async fn stats_page(
         .rev()
         .collect();
 
-    // Build chart series for each vehicle
     let mut efficiency_series: Vec<ChartSeries> = Vec::new();
     let mut cost_per_km_series: Vec<ChartSeries> = Vec::new();
     let mut cost_per_litre_series: Vec<ChartSeries> = Vec::new();
@@ -266,7 +253,6 @@ pub async fn stats_page(
             .cloned()
             .unwrap_or_default();
 
-        // Create a map of date -> (efficiency, cost_per_km, cost_per_litre) for this vehicle
         let mut data_by_date: HashMap<&str, (f64, f64, f64)> = HashMap::new();
         for (date, eff, cpk, cpl) in &vehicle_points {
             data_by_date.insert(date.as_str(), (*eff, *cpk, *cpl));
@@ -327,7 +313,6 @@ pub async fn stats_page(
         series: cost_per_litre_series,
     };
 
-    // Calculate averages
     let avg_efficiency = if !vehicle_stats.is_empty() {
         vehicle_stats.iter().map(|v| v.avg_efficiency).sum::<f64>() / vehicle_stats.len() as f64
     } else {
@@ -363,5 +348,5 @@ pub async fn stats_page(
         volume_unit: db_user.volume_unit,
     };
 
-    Ok(Html(template.render().map_err(internal_error)?))
+    Ok(Html(template.render()?))
 }
