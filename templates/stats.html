@@ -76,14 +76,113 @@
     </div>
 
     <script>
-        const efficiencyChart = document.getElementById('efficiencyChart').getContext('2d');
-        new Chart(efficiencyChart, {{ efficiency_chart.config_json|safe }});
+        const efficiencyCtx = document.getElementById('efficiencyChart').getContext('2d');
+        new Chart(efficiencyCtx, {
+            type: 'line',
+            data: {
+                labels: {{ efficiency_chart.labels|json|safe }},
+                datasets: [
+                    {% for series in efficiency_chart.series %}
+                    {
+                        label: {{ series.label|json|safe }},
+                        data: {{ series.data|json|safe }},
+                        borderColor: {{ series.color|json|safe }},
+                        backgroundColor: {{ series.color|json|safe }},
+                        tension: 0.4,
+                        spanGaps: true
+                    }{% if !loop.last %},{% endif %}
+                    {% endfor %}
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: {{ efficiency_chart.show_legend }},
+                        position: 'bottom'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: '{{ efficiency_chart.y_axis_label }}' }
+                    }
+                }
+            }
+        });
 
-        const costChart = document.getElementById('costChart').getContext('2d');
-        new Chart(costChart, {{ cost_per_km_chart.config_json|safe }});
+        const costCtx = document.getElementById('costChart').getContext('2d');
+        new Chart(costCtx, {
+            type: 'line',
+            data: {
+                labels: {{ cost_per_km_chart.labels|json|safe }},
+                datasets: [
+                    {% for series in cost_per_km_chart.series %}
+                    {
+                        label: {{ series.label|json|safe }},
+                        data: {{ series.data|json|safe }},
+                        borderColor: {{ series.color|json|safe }},
+                        backgroundColor: {{ series.color|json|safe }},
+                        tension: 0.4,
+                        spanGaps: true
+                    }{% if !loop.last %},{% endif %}
+                    {% endfor %}
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: {{ cost_per_km_chart.show_legend }},
+                        position: 'bottom'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: '{{ cost_per_km_chart.y_axis_label }}' }
+                    }
+                }
+            }
+        });
 
-        const costPerLitreChart = document.getElementById('costPerLitreChart').getContext('2d');
-        new Chart(costPerLitreChart, {{ cost_per_litre_chart.config_json|safe }});
+        const costPerLitreCtx = document.getElementById('costPerLitreChart').getContext('2d');
+        new Chart(costPerLitreCtx, {
+            type: 'line',
+            data: {
+                labels: {{ cost_per_litre_chart.labels|json|safe }},
+                datasets: [
+                    {% for series in cost_per_litre_chart.series %}
+                    {
+                        label: {{ series.label|json|safe }},
+                        data: {{ series.data|json|safe }},
+                        borderColor: {{ series.color|json|safe }},
+                        backgroundColor: {{ series.color|json|safe }},
+                        tension: 0.4,
+                        spanGaps: true
+                    }{% if !loop.last %},{% endif %}
+                    {% endfor %}
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: {{ cost_per_litre_chart.show_legend }},
+                        position: 'bottom'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: '{{ cost_per_litre_chart.y_axis_label }}' }
+                    }
+                }
+            }
+        });
     </script>
     {% else %}
     <div class="card fade-in">
