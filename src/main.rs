@@ -1,69 +1,43 @@
 use axum::{Router, routing::get};
 use deadpool_diesel::postgres::{Manager, Pool};
-use diesel::prelude::*;
 use http_security_headers::{
     ContentSecurityPolicy, CrossOriginEmbedderPolicy, CrossOriginOpenerPolicy,
     CrossOriginResourcePolicy, ReferrerPolicy, SecurityHeaders, SecurityHeadersLayer,
 };
-use std::env;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
-use tower_livereload::LiveReloadLayer;
 use tracing::info;
 
-use deesl::{
-    AppState, auth::DEV_AUTH_EMAIL_KEY, handlers, models::NewUser, oauth_handlers, schema::users,
-};
+#[cfg(feature = "dev")]
+use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
+
+#[cfg(feature = "dev")]
+use tower_livereload::LiveReloadLayer;
+
+#[cfg(feature = "dev")]
+use deesl::{models::NewUser, schema::users};
+
+use deesl::{AppConfig, AppState, handlers, oauth_handlers};
 
 async fn serve_version() -> axum::response::Json<serde_json::Value> {
     const VERSION: &str = env!("CARGO_PKG_VERSION");
     axum::response::Json(serde_json::json!({ "version": VERSION }))
 }
 
-#[derive(Debug, Clone)]
-pub struct Config {
-    port: usize,
-    host: String,
-    database_url: String,
-    base_url: String,
-    environment: String,
-}
-
-impl Config {
-    pub fn from_env() -> Self {
-        dotenvy::dotenv().ok();
-
-        Self {
-            port: env::var("PORT")
-                .unwrap_or_else(|_| "8000".to_string())
-                .parse()
-                .expect("PORT must be a number"),
-            host: env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
-            database_url: env::var("DATABASE_URL").expect("DATABASE_URL must be set"),
-            base_url: env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:8000".to_string()),
-            environment: env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()),
-        }
-    }
-
-    pub fn is_development(&self) -> bool {
-        self.environment == "development"
-    }
-}
-
 #[tokio::main]
 async fn main() {
+    dotenvy::dotenv().ok();
     tracing_subscriber::fmt::init();
 
-    let config = Config::from_env();
+    let config = AppConfig::from_env().expect("Failed to load configuration");
 
-    let manager = Manager::new(&config.database_url, deadpool_diesel::Runtime::Tokio1);
+    let manager = Manager::new(&config.database.url, deadpool_diesel::Runtime::Tokio1);
     let pool = Pool::builder(manager)
         .max_size(10)
         .build()
         .expect("Failed to create pool");
 
-    // Run migrations
     let conn = pool
         .get()
         .await
@@ -77,9 +51,9 @@ async fn main() {
     .await
     .expect("Failed to interact with database");
 
-    // Ensure dev user exists if dev auth is enabled
-    if config.is_development() && env::var(DEV_AUTH_EMAIL_KEY).is_ok() {
-        let dev_email = env::var(DEV_AUTH_EMAIL_KEY).unwrap();
+    #[cfg(feature = "dev")]
+    if let Some(dev_email) = &config.dev.dev_auth_email {
+        let dev_email = dev_email.clone();
         let pool_clone = pool.clone();
         tokio::spawn(async move {
             if let Ok(conn) = pool_clone.get().await {
@@ -110,11 +84,18 @@ async fn main() {
 
     let app_state = AppState {
         pool,
-        oauth: oauth_handlers::OAuthConfig::new(&config.base_url),
-        auth: deesl::auth::AuthConfig::new(),
+        oauth: oauth_handlers::OAuthConfig::new(
+            &config.oauth.google_client_id,
+            &config.oauth.google_client_secret,
+            &config.server.base_url,
+        ),
+        auth: deesl::auth::AuthConfig::new(
+            &config.auth.jwt_secret,
+            config.auth.jwt_expiration_hours,
+        ),
     };
 
-    let mut app = Router::new()
+    let app = Router::new()
         .route(
             "/",
             get(|| async { axum::response::Redirect::to("/dashboard") }),
@@ -133,11 +114,10 @@ async fn main() {
         .layer(build_security_headers())
         .with_state(app_state);
 
-    if config.is_development() {
-        app = app.layer(LiveReloadLayer::new());
-    }
+    #[cfg(feature = "dev")]
+    let app = app.layer(LiveReloadLayer::new());
 
-    let addr = format!("{}:{}", config.host, config.port);
+    let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = TcpListener::bind(&addr).await.unwrap();
     info!("listening on {}", addr);
     axum::serve(listener, app).await.unwrap();
@@ -171,34 +151,4 @@ fn build_security_headers() -> SecurityHeadersLayer {
         .unwrap();
 
     SecurityHeadersLayer::new(Arc::new(headers))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_config_is_development_when_environment_is_development() {
-        let config = Config::with_environment("development", vec![]);
-        assert!(config.is_development());
-    }
-
-    #[test]
-    fn test_config_is_not_development_when_environment_is_production() {
-        let config = Config::with_environment("production", vec![]);
-        assert!(!config.is_development());
-    }
-
-    impl Config {
-        #[cfg(test)]
-        pub fn with_environment(env: &str, _cors: Vec<String>) -> Self {
-            Self {
-                port: 8000,
-                host: "127.0.0.1".to_string(),
-                database_url: "postgres://localhost/deesl".to_string(),
-                base_url: "http://localhost:8000".to_string(),
-                environment: env.to_string(),
-            }
-        }
-    }
 }

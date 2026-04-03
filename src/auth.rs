@@ -26,20 +26,24 @@ pub struct Claims {
 #[derive(Clone)]
 pub struct AuthConfig {
     pub secret: String,
+    pub expiration_hours: i64,
 }
 
 impl AuthConfig {
-    pub fn new() -> Self {
+    pub fn new(secret: &str, expiration_hours: i64) -> Self {
         Self {
-            secret: std::env::var(JWT_SECRET_KEY)
-                .unwrap_or_else(|_| "dev-secret-change-in-production".to_string()),
+            secret: secret.to_string(),
+            expiration_hours,
         }
     }
 }
 
 impl Default for AuthConfig {
     fn default() -> Self {
-        Self::new()
+        Self {
+            secret: "dev-secret-change-in-production".to_string(),
+            expiration_hours: 24 * 7,
+        }
     }
 }
 
@@ -50,7 +54,7 @@ impl AuthConfig {
         email: &str,
     ) -> Result<String, jsonwebtoken::errors::Error> {
         let expiration = chrono::Utc::now()
-            .checked_add_signed(chrono::Duration::hours(JWT_EXPIRATION_HOURS))
+            .checked_add_signed(chrono::Duration::hours(self.expiration_hours))
             .unwrap()
             .timestamp();
 
@@ -122,13 +126,14 @@ where
 }
 
 pub fn is_dev_auth_bypass_allowed(_headers: &HeaderMap) -> Option<String> {
-    // Layer 1: Compile-time check - only in debug builds
-    if cfg!(not(debug_assertions)) {
-        return None;
+    #[cfg(feature = "dev")]
+    {
+        std::env::var(DEV_AUTH_EMAIL_KEY).ok()
     }
-
-    // Layer 2: DEV_AUTH_EMAIL must be set
-    std::env::var(DEV_AUTH_EMAIL_KEY).ok()
+    #[cfg(not(feature = "dev"))]
+    {
+        None
+    }
 }
 
 pub async fn extract_auth_user(
@@ -177,6 +182,7 @@ mod tests {
     fn config_with_secret(secret: &str) -> AuthConfig {
         AuthConfig {
             secret: secret.to_string(),
+            expiration_hours: 24 * 7,
         }
     }
 

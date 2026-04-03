@@ -11,6 +11,10 @@ path = "src/lib.rs"
 name = "deesl"
 path = "src/main.rs"
 
+[features]
+default = []
+dev = []
+
 [dependencies]
 askama = { version = "0.12.1", features = ["serde-json"] }
 axum = { version = "0.8.8", features = ["json", "tokio", "form", "multipart"] }
@@ -22,6 +26,7 @@ deadpool-diesel = { version = "0.6.1", features = ["postgres"] }
 diesel = { version = "2.3.6", features = ["postgres", "chrono", "uuid"] }
 diesel_migrations = { version = "2.2.0", features = ["postgres"] }
 dotenvy = "0.15.7"
+figment = { version = "0.10.8", features = ["env", "toml"] }
 headers = "0.4"
 http = "1"
 jsonwebtoken = "9.3"

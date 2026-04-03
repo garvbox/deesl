@@ -47,7 +47,7 @@ pub async fn create_test_app(pool: Pool) -> Router {
     let app_state = deesl::AppState {
         pool,
         oauth: oauth_handlers::OAuthConfig::test_config(),
-        auth: deesl::auth::AuthConfig::new(),
+        auth: deesl::auth::AuthConfig::new("test-secret", 168),
     };
 
     Router::new()
@@ -70,7 +70,7 @@ pub async fn create_test_app(pool: Pool) -> Router {
 
 /// Creates a JWT token for a test user
 pub fn create_test_token(user_id: i32, email: &str) -> String {
-    let auth_config = AuthConfig::new();
+    let auth_config = AuthConfig::new("test-secret", 168);
     auth_config.create_token(user_id, email).unwrap()
 }
 
