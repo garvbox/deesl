@@ -25,6 +25,10 @@ async fn serve_version() -> axum::response::Json<serde_json::Value> {
     axum::response::Json(serde_json::json!({ "version": VERSION }))
 }
 
+async fn health() -> axum::response::Json<serde_json::Value> {
+    axum::response::Json(serde_json::json!({ "status": "ok" }))
+}
+
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
@@ -109,6 +113,7 @@ async fn main() {
         .nest("/stats", handlers::stats::router())
         .nest("/import", handlers::import::router())
         .route("/api/version", get(serve_version))
+        .route("/health", get(health))
         .merge(oauth_handlers::router())
         .layer(TraceLayer::new_for_http())
         .layer(build_security_headers())
