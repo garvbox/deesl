@@ -28,24 +28,24 @@ diesel_migrations = { version = "2.2.0", features = ["postgres"] }
 dotenvy = "0.15.7"
 headers = "0.4"
 http = "1"
+http-security-headers = { version = "0.1", features = ["middleware"] }
 jsonwebtoken = "9.3"
+oauth2 = "4"
+reqwest = { version = "0.13.2", features = ["json"] }
 rstest = "0.25.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread"] }
 tokio-util = "0.7.18"
-http-security-headers = { version = "0.1", features = ["middleware"] }
+tower = "0.5"
 tower-cookies = "0.11"
 tower-http = { version = "0.6.8", features = ["trace", "fs"] }
 tower-livereload = "0.9.6"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.22"
-validator = "0.20.0"
-oauth2 = "4"
-reqwest = { version = "0.13.2", features = ["json"] }
 urlencoding = "2.1.3"
-tower = "0.5"
 uuid = { version = "1", features = ["v4", "serde"] }
+validator = "0.20.0"
 
 [dev-dependencies]
 axum-test = "18"
