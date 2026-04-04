@@ -36,7 +36,7 @@ async fn main() {
 
     let config = AppConfig::from_env().expect("Failed to load configuration");
 
-    let manager = Manager::new(&config.database.url, deadpool_diesel::Runtime::Tokio1);
+    let manager = Manager::new(&config.database_url, deadpool_diesel::Runtime::Tokio1);
     let pool = Pool::builder(manager)
         .max_size(10)
         .build()
@@ -56,7 +56,7 @@ async fn main() {
     .expect("Failed to interact with database");
 
     #[cfg(feature = "dev")]
-    if let Some(dev_email) = &config.dev.dev_auth_email {
+    if let Some(dev_email) = &config.dev_auth_email {
         let dev_email = dev_email.clone();
         let pool_clone = pool.clone();
         tokio::spawn(async move {
@@ -89,14 +89,11 @@ async fn main() {
     let app_state = AppState {
         pool,
         oauth: oauth_handlers::OAuthConfig::new(
-            &config.oauth.google_client_id,
-            &config.oauth.google_client_secret,
-            &config.server.base_url,
+            &config.google_client_id,
+            &config.google_client_secret,
+            &config.base_url,
         ),
-        auth: deesl::auth::AuthConfig::new(
-            &config.auth.jwt_secret,
-            config.auth.jwt_expiration_hours,
-        ),
+        auth: deesl::auth::AuthConfig::new(&config.jwt_secret, config.jwt_expiration_hours),
     };
 
     let app = Router::new()
@@ -122,7 +119,7 @@ async fn main() {
     #[cfg(feature = "dev")]
     let app = app.layer(LiveReloadLayer::new());
 
-    let addr = format!("{}:{}", config.server.host, config.server.port);
+    let addr = format!("{}:{}", config.host, config.port);
     let listener = TcpListener::bind(&addr).await.unwrap();
     info!("listening on {}", addr);
     axum::serve(listener, app).await.unwrap();
