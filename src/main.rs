@@ -93,10 +93,7 @@ async fn main() {
             &config.google_client_secret,
             &config.base_url,
         ),
-        auth: deesl::auth::AuthConfig::new(
-            &config.jwt_secret,
-            config.jwt_expiration_hours,
-        ),
+        auth: deesl::auth::AuthConfig::new(&config.jwt_secret, config.jwt_expiration_hours),
     };
 
     let app = Router::new()
