@@ -5,6 +5,7 @@ use axum::{
     response::{Html, IntoResponse},
     routing::get,
 };
+use axum_csrf::CsrfToken;
 use diesel::prelude::*;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -24,6 +25,7 @@ pub fn router() -> Router<AppState> {
 #[template(path = "stats.html")]
 pub struct StatsTemplate {
     pub logged_in: bool,
+    pub csrf_token: String,
     pub has_data: bool,
     pub period: String,
     pub total_entries: usize,
@@ -119,6 +121,7 @@ pub struct VehicleStat {
 pub async fn stats_page(
     DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
+    token: CsrfToken,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
@@ -170,6 +173,7 @@ pub async fn stats_page(
         let empty_chart = ChartData::empty();
         let template = StatsTemplate {
             logged_in: true,
+            csrf_token: token.authenticity_token().unwrap_or_default(),
             has_data: false,
             period: period.clone(),
             total_entries: 0,
@@ -346,6 +350,7 @@ pub async fn stats_page(
 
     let template = StatsTemplate {
         logged_in: true,
+        csrf_token: token.authenticity_token().unwrap_or_default(),
         has_data: true,
         period: period.clone(),
         total_entries: aggregator.total_entries,

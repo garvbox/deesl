@@ -86,6 +86,9 @@ async fn main() {
         });
     }
 
+    let csrf_config = axum_csrf::CsrfConfig::default()
+        .with_key(Some(axum_csrf::Key::from(config.auth.jwt_secret.as_bytes())));
+
     let app_state = AppState {
         pool,
         oauth: oauth_handlers::OAuthConfig::new(
@@ -97,6 +100,7 @@ async fn main() {
             &config.auth.jwt_secret,
             config.auth.jwt_expiration_hours,
         ),
+        csrf: csrf_config.clone(),
     };
 
     let app = Router::new()
@@ -115,6 +119,9 @@ async fn main() {
         .route("/api/version", get(serve_version))
         .route("/health", get(health))
         .merge(oauth_handlers::router())
+        .layer(axum::middleware::from_fn_with_state(app_state.clone(), deesl::auth::csrf_middleware))
+        .layer(axum_csrf::CsrfLayer::new(csrf_config))
+        .layer(tower_cookies::CookieManagerLayer::new())
         .layer(TraceLayer::new_for_http())
         .layer(build_security_headers())
         .with_state(app_state);

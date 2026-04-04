@@ -5,6 +5,7 @@ use axum::{
     response::{Html, IntoResponse},
     routing::{get, post},
 };
+use axum_csrf::CsrfToken;
 use diesel::prelude::*;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -29,12 +30,14 @@ pub fn router() -> Router<AppState> {
 #[template(path = "stations.html")]
 pub struct StationsTemplate {
     pub logged_in: bool,
+    pub csrf_token: String,
     pub stations: Vec<FuelStation>,
 }
 
 pub async fn stations_page(
     DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
+    token: CsrfToken,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
@@ -53,6 +56,7 @@ pub async fn stations_page(
 
     let template = StationsTemplate {
         logged_in: true,
+        csrf_token: token.authenticity_token().unwrap_or_default(),
         stations,
     };
     Ok(Html(template.render()?))

@@ -1,8 +1,11 @@
 use axum::{
     extract::{FromRef, FromRequestParts},
-    http::{HeaderMap, request::Parts},
-    response::Redirect,
+    http::{HeaderMap, Method, StatusCode, request::Parts},
+    response::{IntoResponse, Redirect, Response},
+    middleware::Next,
+    body::{Body, Bytes},
 };
+use axum_csrf::CsrfToken;
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
@@ -11,6 +14,71 @@ use serde::{Deserialize, Serialize};
 use crate::error::AppError;
 use crate::oauth_handlers::extract_cookie;
 use crate::schema::users;
+
+// ... (AuthConfig and Claims)
+
+pub async fn csrf_middleware(
+    token: CsrfToken,
+    req: axum::extract::Request,
+    next: Next,
+) -> Result<Response, AppError> {
+    if req.method() == Method::GET
+        || req.method() == Method::HEAD
+        || req.method() == Method::OPTIONS
+    {
+        return Ok(next.run(req).await);
+    }
+
+    tracing::debug!("CSRF Check for method: {}", req.method());
+    tracing::debug!("Headers: {:?}", req.headers());
+    if let Some(cookies) = req.headers().get(axum::http::header::COOKIE) {
+        tracing::debug!("Cookies: {:?}", cookies);
+    } else {
+        tracing::debug!("No cookies found");
+    }
+
+    // Check header first (HTMX)
+    if let Some(h) = req.headers().get("X-CSRF-Token").and_then(|v| v.to_str().ok()) {
+        tracing::debug!("Checking token from header: {}", h);
+        if token.verify(h).is_ok() {
+            return Ok(next.run(req).await);
+        }
+        tracing::debug!("Token verification failed for header");
+    }
+
+    // For multipart forms (like file upload), we don't want to buffer the whole thing if it's huge.
+    // But we need the token.
+    // Usually HTMX sends multipart if it has files.
+    // If it's a standard form (application/x-www-form-urlencoded), we buffer.
+    
+    let is_form = req.headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.starts_with("application/x-www-form-urlencoded"))
+        .unwrap_or(false);
+
+    if is_form {
+        let (parts, body) = req.into_parts();
+        let bytes = axum::body::to_bytes(body, 1024 * 1024) // 1MB limit
+            .await
+            .map_err(|e| AppError::BadRequest(format!("Failed to read body: {}", e)))?;
+
+        // Check for authenticity_token in form data
+        let params: Vec<(String, String)> = serde_urlencoded::from_bytes(&bytes)
+            .map_err(|_| AppError::BadRequest("Invalid form data".to_string()))?;
+
+        let form_token = params.iter().find(|(k, _)| k == "authenticity_token").map(|(_, v)| v);
+
+        if let Some(t) = form_token {
+            if token.verify(t).is_ok() {
+                let req = axum::extract::Request::from_parts(parts, Body::from(bytes));
+                return Ok(next.run(req).await);
+            }
+        }
+    }
+
+    Err(AppError::Forbidden("Invalid CSRF token".to_string()))
+}
 
 pub const JWT_SECRET_KEY: &str = "JWT_SECRET";
 pub const DEV_AUTH_EMAIL_KEY: &str = "DEV_AUTH_EMAIL";

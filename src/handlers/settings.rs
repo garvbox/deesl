@@ -4,6 +4,7 @@ use axum::{
     response::{Html, IntoResponse},
     routing::get,
 };
+use axum_csrf::CsrfToken;
 use diesel::prelude::*;
 use serde::Deserialize;
 
@@ -25,6 +26,7 @@ pub fn router() -> Router<AppState> {
 #[template(path = "settings.html")]
 pub struct SettingsTemplate {
     pub logged_in: bool,
+    pub csrf_token: String,
     pub user_email: String,
     pub current_currency: String,
     pub currencies: Vec<String>,
@@ -49,6 +51,7 @@ impl SettingsTemplate {
 pub async fn settings_page(
     DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
+    token: CsrfToken,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
@@ -62,6 +65,7 @@ pub async fn settings_page(
 
     let template = SettingsTemplate {
         logged_in: true,
+        csrf_token: token.authenticity_token().unwrap_or_default(),
         user_email: db_user.email,
         current_currency: db_user.currency,
         currencies: SUPPORTED_CURRENCIES.iter().map(|s| s.to_string()).collect(),

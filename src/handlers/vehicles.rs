@@ -4,6 +4,7 @@ use axum::{
     response::{Html, IntoResponse},
     routing::{delete, get},
 };
+use axum_csrf::CsrfToken;
 use diesel::prelude::*;
 use serde::Deserialize;
 
@@ -27,10 +28,17 @@ pub fn router() -> Router<AppState> {
 #[template(path = "add_vehicle.html")]
 pub struct AddVehicleTemplate {
     pub logged_in: bool,
+    pub csrf_token: String,
 }
 
-pub async fn new_vehicle(AuthUserRedirect(_user): AuthUserRedirect) -> impl IntoResponse {
-    let template = AddVehicleTemplate { logged_in: true };
+pub async fn new_vehicle(
+    AuthUserRedirect(_user): AuthUserRedirect,
+    token: CsrfToken,
+) -> impl IntoResponse {
+    let template = AddVehicleTemplate {
+        logged_in: true,
+        csrf_token: token.authenticity_token().unwrap_or_default(),
+    };
     Html(template.render().unwrap())
 }
 
@@ -38,10 +46,17 @@ pub async fn new_vehicle(AuthUserRedirect(_user): AuthUserRedirect) -> impl Into
 #[template(path = "vehicles.html")]
 pub struct VehiclesTemplate {
     pub logged_in: bool,
+    pub csrf_token: String,
 }
 
-pub async fn vehicles_page(AuthUserRedirect(_user): AuthUserRedirect) -> impl IntoResponse {
-    let template = VehiclesTemplate { logged_in: true };
+pub async fn vehicles_page(
+    AuthUserRedirect(_user): AuthUserRedirect,
+    token: CsrfToken,
+) -> impl IntoResponse {
+    let template = VehiclesTemplate {
+        logged_in: true,
+        csrf_token: token.authenticity_token().unwrap_or_default(),
+    };
     Html(template.render().unwrap())
 }
 

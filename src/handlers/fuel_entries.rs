@@ -5,6 +5,7 @@ use axum::{
     response::{Html, IntoResponse},
     routing::{delete, get, post},
 };
+use axum_csrf::CsrfToken;
 use diesel::prelude::*;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -31,6 +32,7 @@ pub fn router() -> Router<AppState> {
 #[template(path = "add_fuel_entry.html")]
 pub struct AddFuelEntryTemplate {
     pub logged_in: bool,
+    pub csrf_token: String,
     pub vehicles: Vec<Vehicle>,
     pub stations: Vec<FuelStation>,
     pub current_time: String,
@@ -41,6 +43,7 @@ pub struct AddFuelEntryTemplate {
 pub async fn new_fuel_entry(
     DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
+    token: CsrfToken,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
@@ -67,6 +70,7 @@ pub async fn new_fuel_entry(
 
     let template = AddFuelEntryTemplate {
         logged_in: true,
+        csrf_token: token.authenticity_token().unwrap_or_default(),
         vehicles: user_vehicles,
         stations: user_stations,
         current_time: chrono::Local::now().format("%Y-%m-%dT%H:%M").to_string(),
@@ -203,6 +207,7 @@ pub async fn htmx_recent_entries(
 #[template(path = "edit_fuel_entry.html")]
 pub struct EditFuelEntryTemplate {
     pub logged_in: bool,
+    pub csrf_token: String,
     pub entry: FuelEntry,
     pub vehicle: Vehicle,
     pub stations: Vec<FuelStation>,
@@ -215,6 +220,7 @@ pub struct EditFuelEntryTemplate {
 pub async fn edit_fuel_entry(
     DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
+    token: CsrfToken,
     axum::extract::Path(entry_id): axum::extract::Path<i32>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
@@ -257,6 +263,7 @@ pub async fn edit_fuel_entry(
 
     let template = EditFuelEntryTemplate {
         logged_in: true,
+        csrf_token: token.authenticity_token().unwrap_or_default(),
         entry,
         vehicle,
         stations,
@@ -323,6 +330,7 @@ pub async fn update_fuel_entry(
 #[template(path = "fuel_entries.html")]
 pub struct FuelEntriesTemplate {
     pub logged_in: bool,
+    pub csrf_token: String,
     pub entries: Vec<(crate::models::FuelEntry, Vehicle, Option<FuelStation>)>,
     pub vehicles: Vec<Vehicle>,
     pub stations: Vec<FuelStation>,
@@ -340,6 +348,7 @@ pub struct FuelEntriesTemplate {
 pub async fn fuel_entries_page(
     DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
+    token: CsrfToken,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
@@ -431,6 +440,7 @@ pub async fn fuel_entries_page(
 
     let template = FuelEntriesTemplate {
         logged_in: true,
+        csrf_token: token.authenticity_token().unwrap_or_default(),
         entries,
         vehicles,
         stations,

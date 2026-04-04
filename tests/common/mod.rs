@@ -15,6 +15,7 @@ pub struct TestUser {
 
 /// Creates a test database pool connected to the test database
 pub async fn create_test_pool() -> Pool {
+    let _ = tracing_subscriber::fmt::try_init();
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/deesl_test".to_string());
     let manager = Manager::new(database_url, deadpool_diesel::Runtime::Tokio1);
@@ -44,10 +45,14 @@ pub async fn create_test_app(pool: Pool) -> Router {
     use deesl::oauth_handlers;
     use tower_http::trace::TraceLayer;
 
+    let csrf_config = axum_csrf::CsrfConfig::default()
+        .with_key(Some(axum_csrf::Key::from("test-secret-test-secret-test-secret-test-secret-test-secret-test-secret".as_bytes())));
+
     let app_state = deesl::AppState {
         pool,
         oauth: oauth_handlers::OAuthConfig::test_config(),
         auth: deesl::auth::AuthConfig::new("test-secret", 168),
+        csrf: csrf_config.clone(),
     };
 
     Router::new()
@@ -64,6 +69,9 @@ pub async fn create_test_app(pool: Pool) -> Router {
         .nest("/stats", handlers::stats::router())
         .nest("/import", handlers::import::router())
         .merge(oauth_handlers::router())
+        .layer(axum::middleware::from_fn_with_state(app_state.clone(), deesl::auth::csrf_middleware))
+        .layer(axum_csrf::CsrfLayer::new(csrf_config))
+        .layer(tower_cookies::CookieManagerLayer::new())
         .layer(TraceLayer::new_for_http())
         .with_state(app_state)
 }
@@ -102,15 +110,33 @@ pub async fn create_test_user(env: &TestEnv, prefix: &str) -> TestUser {
     create_test_user_db(&env.pool, &email).await
 }
 
-/// Extension trait for TestServer to add authentication
+/// Extracts CSRF token from HTML response
+pub fn extract_csrf_token(html: &str) -> String {
+html.split("name=\"csrf-token\" content=\"")
+    .nth(1)
+    .unwrap_or_default()
+    .split("\"")
+    .next()
+    .unwrap_or_default()
+    .to_string()
+}
+
+use tower_cookies::Cookie;
+
+/// Extension trait for TestServer to add authentication and CSRF
 pub trait AuthenticatedRequest {
-    fn with_auth(self, token: &str) -> Self;
+fn with_auth(self, token: &str) -> Self;
+fn with_csrf(self, csrf_token: &str) -> Self;
 }
 
 impl AuthenticatedRequest for axum_test::TestRequest {
-    fn with_auth(self, token: &str) -> Self {
-        self.add_header("Cookie", format!("auth_token={}", token))
-    }
+fn with_auth(self, token: &str) -> Self {
+    self.add_cookie(Cookie::new("auth_token", token.to_string()))
+}
+
+fn with_csrf(self, csrf_token: &str) -> Self {
+    self.add_header("X-CSRF-Token", csrf_token.to_string())
+}
 }
 
 /// Creates a test user in the database
@@ -220,6 +246,7 @@ pub async fn post_import_csv(
     server: &TestServer,
     path: &str,
     token: &str,
+    csrf_token: &str,
     vehicle_id: i32,
     csv_content: &[u8],
     mappings: Option<std::collections::HashMap<String, String>>,
@@ -241,7 +268,8 @@ pub async fn post_import_csv(
 
     server
         .post(path)
-        .add_header("Cookie", format!("auth_token={}", token))
+        .with_auth(token)
+        .with_csrf(csrf_token)
         .multipart(form)
         .await
 }
@@ -250,6 +278,7 @@ pub async fn post_import_csv(
 pub async fn post_import_execute(
     server: &TestServer,
     token: &str,
+    csrf_token: &str,
     import_id: &str,
     vehicle_id: i32,
     mappings: std::collections::HashMap<String, String>,
@@ -266,7 +295,8 @@ pub async fn post_import_execute(
 
     server
         .post("/import/htmx/execute")
-        .add_header("Cookie", format!("auth_token={}", token))
+        .with_auth(token)
+        .with_csrf(csrf_token)
         .form(&form_data)
         .await
 }

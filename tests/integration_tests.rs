@@ -7,6 +7,27 @@ mod common;
 use common::AuthenticatedRequest;
 
 #[tokio::test]
+async fn test_create_vehicle_fails_without_csrf() {
+    let env = common::create_test_env().await;
+    let user = common::create_test_user(&env, "csrf_fail").await;
+
+    let form = [
+        ("make", "BMW"),
+        ("model", "M3"),
+        ("registration", "M3-FAIL"),
+    ];
+
+    // This SHOULD fail with 403 Forbidden because we don't have a CSRF token
+    let response = env
+        .server
+        .post("/vehicles")
+        .with_auth(&user.token)
+        .form(&form)
+        .await;
+
+    response.assert_status(StatusCode::FORBIDDEN);
+}
+#[tokio::test]
 async fn test_root_redirects_to_dashboard() {
     let env = common::create_test_env().await;
     let response = env.server.get("/").await;
@@ -84,6 +105,10 @@ async fn test_create_vehicle_and_redirects() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "create_test").await;
 
+    let dashboard_resp = env.server.get("/dashboard").with_auth(&user.token).await;
+    println!("Dashboard Headers: {:?}", dashboard_resp.headers());
+    let csrf_token = common::extract_csrf_token(&dashboard_resp.text());
+
     let form = [
         ("make", "BMW"),
         ("model", "M3"),
@@ -94,6 +119,7 @@ async fn test_create_vehicle_and_redirects() {
         .server
         .post("/vehicles")
         .with_auth(&user.token)
+        .with_csrf(&csrf_token)
         .form(&form)
         .await;
 
@@ -107,6 +133,9 @@ async fn test_settings_can_update_currency() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "settings_test").await;
 
+    let dashboard_resp = env.server.get("/dashboard").with_auth(&user.token).await;
+    let csrf_token = common::extract_csrf_token(&dashboard_resp.text());
+
     let form = [
         ("currency", "USD"),
         ("distance_unit", "mi"),
@@ -117,6 +146,7 @@ async fn test_settings_can_update_currency() {
         .server
         .patch("/settings")
         .with_auth(&user.token)
+        .with_csrf(&csrf_token)
         .form(&form)
         .await;
 
@@ -131,12 +161,16 @@ async fn test_import_preview_accepts_csv() {
     let vehicle_id =
         common::create_test_vehicle_db(&env.pool, user.id, "Import", "Car", "IMP-1").await;
 
+    let dashboard_resp = env.server.get("/dashboard").with_auth(&user.token).await;
+    let csrf_token = common::extract_csrf_token(&dashboard_resp.text());
+
     let csv_content = b"Date,Litres,Cost,Mileage\n2024-03-01,40.5,60.0,10000";
 
     let response = common::post_import_csv(
         &env.server,
         "/import/htmx/preview",
         &user.token,
+        &csrf_token,
         vehicle_id,
         csv_content,
         None,
@@ -188,6 +222,10 @@ async fn test_htmx_recent_entries_returns_fragment() {
 async fn test_create_fuel_entry_and_redirects() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "fuel_test").await;
+
+    let dashboard_resp = env.server.get("/dashboard").with_auth(&user.token).await;
+    let csrf_token = common::extract_csrf_token(&dashboard_resp.text());
+
     let vehicle_id =
         common::create_test_vehicle_db(&env.pool, user.id, "Ford", "Focus", "FORD-F").await;
     let station_id = common::create_test_station_db(&env.pool, user.id, "Test Station").await;
@@ -205,6 +243,7 @@ async fn test_create_fuel_entry_and_redirects() {
         .server
         .post("/fuel-entries")
         .with_auth(&user.token)
+        .with_csrf(&csrf_token)
         .form(&form)
         .await;
 
@@ -217,6 +256,13 @@ async fn test_create_fuel_entry_with_shared_write_access() {
     let env = common::create_test_env().await;
     let owner = common::create_test_user(&env, "owner").await;
     let shared_user = common::create_test_user(&env, "shared").await;
+
+    let dashboard_resp = env
+        .server
+        .get("/dashboard")
+        .with_auth(&shared_user.token)
+        .await;
+    let csrf_token = common::extract_csrf_token(&dashboard_resp.text());
 
     let vehicle_id =
         common::create_test_vehicle_db(&env.pool, owner.id, "Shared", "Car", "SHARE-1").await;
@@ -238,6 +284,7 @@ async fn test_create_fuel_entry_with_shared_write_access() {
         .server
         .post("/fuel-entries")
         .with_auth(&shared_user.token)
+        .with_csrf(&csrf_token)
         .form(&form)
         .await;
 
@@ -251,6 +298,13 @@ async fn test_create_fuel_entry_with_shared_read_access_denied() {
     let env = common::create_test_env().await;
     let owner = common::create_test_user(&env, "owner").await;
     let shared_user = common::create_test_user(&env, "shared").await;
+
+    let dashboard_resp = env
+        .server
+        .get("/dashboard")
+        .with_auth(&shared_user.token)
+        .await;
+    let csrf_token = common::extract_csrf_token(&dashboard_resp.text());
 
     let vehicle_id =
         common::create_test_vehicle_db(&env.pool, owner.id, "Shared", "Car", "SHARE-2").await;
@@ -272,6 +326,7 @@ async fn test_create_fuel_entry_with_shared_read_access_denied() {
         .server
         .post("/fuel-entries")
         .with_auth(&shared_user.token)
+        .with_csrf(&csrf_token)
         .form(&form)
         .await;
 
@@ -283,6 +338,10 @@ async fn test_create_fuel_entry_with_shared_read_access_denied() {
 async fn test_htmx_delete_vehicle() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "delete_test").await;
+
+    let dashboard_resp = env.server.get("/dashboard").with_auth(&user.token).await;
+    let csrf_token = common::extract_csrf_token(&dashboard_resp.text());
+
     let vehicle_id =
         common::create_test_vehicle_db(&env.pool, user.id, "Old", "Car", "OLD-1").await;
 
@@ -290,6 +349,7 @@ async fn test_htmx_delete_vehicle() {
         .server
         .delete(&format!("/vehicles/htmx/{}", vehicle_id))
         .with_auth(&user.token)
+        .with_csrf(&csrf_token)
         .await;
 
     response.assert_status_ok();
@@ -315,6 +375,10 @@ async fn test_htmx_delete_vehicle() {
 async fn test_htmx_import_execute() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "import_exec").await;
+
+    let dashboard_resp = env.server.get("/dashboard").with_auth(&user.token).await;
+    let csrf_token = common::extract_csrf_token(&dashboard_resp.text());
+
     let vehicle_id =
         common::create_test_vehicle_db(&env.pool, user.id, "Import", "Car", "IMP-2").await;
 
@@ -325,6 +389,7 @@ async fn test_htmx_import_execute() {
         &env.server,
         "/import/htmx/preview",
         &user.token,
+        &csrf_token,
         vehicle_id,
         csv_content,
         None,
@@ -354,9 +419,15 @@ async fn test_htmx_import_execute() {
     mappings.insert("col_3".to_string(), "Mileage".to_string());
     mappings.insert("map_3".to_string(), "mileage_km".to_string());
 
-    let response =
-        common::post_import_execute(&env.server, &user.token, import_id, vehicle_id, mappings)
-            .await;
+    let response = common::post_import_execute(
+        &env.server,
+        &user.token,
+        &csrf_token,
+        import_id,
+        vehicle_id,
+        mappings,
+    )
+    .await;
 
     response.assert_status_ok();
     assert!(response.text().contains("Import Successful"));
@@ -367,6 +438,10 @@ async fn test_htmx_import_execute() {
 async fn test_merge_stations() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "merge_test").await;
+
+    let dashboard_resp = env.server.get("/dashboard").with_auth(&user.token).await;
+    let csrf_token = common::extract_csrf_token(&dashboard_resp.text());
+
     let vehicle_id =
         common::create_test_vehicle_db(&env.pool, user.id, "Merge", "Car", "MERGE-1").await;
 
@@ -398,6 +473,7 @@ async fn test_merge_stations() {
         .server
         .post(&format!("/stations/{}/merge", station1_id))
         .with_auth(&user.token)
+        .with_csrf(&csrf_token)
         .form(&form)
         .await;
 

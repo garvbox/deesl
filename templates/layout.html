@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Deesl{% endblock %}</title>
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <script src="https://unpkg.com/htmx.org@2.0.0/dist/htmx.min.js" integrity="sha384-wS5l5IKJBvK6sPTKa2WZ1js3d947pvWXbPJ1OmWfEuxLgeHcEbjUUA5i9V5ZkpCw" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
@@ -598,6 +599,31 @@
 
         // Run on page load
         initTheme();
+
+        // HTMX CSRF protection
+        document.body.addEventListener('htmx:configRequest', (event) => {
+            const token = document.querySelector('meta[name="csrf-token"]').content;
+            if (token) {
+                event.detail.headers['X-CSRF-Token'] = token;
+            }
+        });
+
+        // Standard form CSRF protection
+        document.addEventListener('submit', (e) => {
+            if (e.target.method && e.target.method.toLowerCase() === 'post') {
+                const token = document.querySelector('meta[name="csrf-token"]').content;
+                if (token) {
+                    let input = e.target.querySelector('input[name="authenticity_token"]');
+                    if (!input) {
+                        input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'authenticity_token';
+                        e.target.appendChild(input);
+                    }
+                    input.value = token;
+                }
+            }
+        });
     </script>
 </body>
 </html>

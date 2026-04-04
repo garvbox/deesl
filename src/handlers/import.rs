@@ -5,6 +5,7 @@ use axum::{
     response::{Html, IntoResponse},
     routing::{get, post},
 };
+use axum_csrf::CsrfToken;
 use chrono::Datelike;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -332,12 +333,14 @@ pub async fn perform_import(
 #[template(path = "import.html")]
 pub struct ImportTemplate {
     pub logged_in: bool,
+    pub csrf_token: String,
     pub vehicles: Vec<Vehicle>,
 }
 
 pub async fn import_page(
     DbConn(conn): DbConn,
     AuthUserRedirect(user): AuthUserRedirect,
+    token: CsrfToken,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
@@ -352,6 +355,7 @@ pub async fn import_page(
 
     let template = ImportTemplate {
         logged_in: true,
+        csrf_token: token.authenticity_token().unwrap_or_default(),
         vehicles: user_vehicles,
     };
     Ok(Html(template.render()?))

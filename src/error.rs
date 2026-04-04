@@ -124,3 +124,9 @@ impl From<MultipartError> for AppError {
         AppError::Internal(err.to_string())
     }
 }
+
+impl From<axum_csrf::CsrfError> for AppError {
+    fn from(err: axum_csrf::CsrfError) -> Self {
+        AppError::Forbidden(err.to_string())
+    }
+}
