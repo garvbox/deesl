@@ -313,19 +313,19 @@ pub async fn stats_page(
     let efficiency_chart = ChartData::new(
         labels.clone(),
         efficiency_series,
-        format!("{}/{}", &db_user.distance_unit, &db_user.volume_unit),
+        format!("{}/{}", db_user.distance_unit, db_user.volume_unit),
     );
 
     let cost_per_km_chart = ChartData::new(
         labels.clone(),
         cost_per_km_series,
-        format!("€/{}", &db_user.distance_unit),
+        format!("€/{}", db_user.distance_unit),
     );
 
     let cost_per_litre_chart = ChartData::new(
         labels,
         cost_per_litre_series,
-        format!("€/{}", &db_user.volume_unit),
+        format!("€/{}", db_user.volume_unit),
     );
 
     let vehicle_stats: Vec<VehicleStat> = aggregator

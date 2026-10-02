@@ -7,6 +7,7 @@ pub mod models;
 pub mod oauth_handlers;
 pub mod schema;
 pub mod state;
+pub mod user;
 
 pub use config::AppConfig;
 pub use error::AppError;

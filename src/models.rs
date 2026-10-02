@@ -37,6 +37,19 @@ pub struct NewUser {
     pub volume_unit: String,
 }
 
+impl NewUser {
+    pub fn for_email(email: impl Into<String>) -> Self {
+        Self {
+            email: email.into(),
+            password_hash: None,
+            currency: "EUR".to_string(),
+            google_id: None,
+            distance_unit: "km".to_string(),
+            volume_unit: "L".to_string(),
+        }
+    }
+}
+
 #[derive(Queryable, Selectable, serde::Serialize, Clone)]
 #[diesel(table_name = crate::schema::vehicles)]
 #[diesel(check_for_backend(diesel::pg::Pg))]

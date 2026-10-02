@@ -10,15 +10,9 @@ use tower_http::trace::TraceLayer;
 use tracing::info;
 
 #[cfg(feature = "dev")]
-use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
-
-#[cfg(feature = "dev")]
 use tower_livereload::LiveReloadLayer;
 
-#[cfg(feature = "dev")]
-use deesl::{models::NewUser, schema::users};
-
-use deesl::{AppConfig, AppState, handlers, oauth_handlers};
+use deesl::{AppConfig, AppError, AppState, db::run_migrations, handlers, oauth_handlers};
 
 async fn serve_version() -> axum::response::Json<serde_json::Value> {
     const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -30,7 +24,7 @@ async fn health() -> axum::response::Json<serde_json::Value> {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), AppError> {
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt::init();
 
@@ -42,49 +36,10 @@ async fn main() {
         .build()
         .expect("Failed to create pool");
 
-    let conn = pool
-        .get()
-        .await
-        .expect("Failed to get connection from pool");
-    conn.interact(|conn| {
-        use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
-        const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
-        conn.run_pending_migrations(MIGRATIONS)
-            .expect("Failed to run migrations");
-    })
-    .await
-    .expect("Failed to interact with database");
+    run_migrations(&pool).await?;
 
     #[cfg(feature = "dev")]
-    if let Some(dev_email) = &config.dev_auth_email {
-        let dev_email = dev_email.clone();
-        let pool_clone = pool.clone();
-        tokio::spawn(async move {
-            if let Ok(conn) = pool_clone.get().await {
-                let _ = conn
-                    .interact(move |conn| {
-                        let exists = users::table
-                            .filter(users::email.eq(&dev_email))
-                            .first::<deesl::models::User>(conn)
-                            .is_ok();
-
-                        if !exists {
-                            let _ = diesel::insert_into(users::table)
-                                .values(NewUser {
-                                    email: dev_email,
-                                    password_hash: None,
-                                    google_id: None,
-                                    currency: "EUR".to_string(),
-                                    distance_unit: "km".to_string(),
-                                    volume_unit: "L".to_string(),
-                                })
-                                .execute(conn);
-                        }
-                    })
-                    .await;
-            }
-        });
-    }
+    setup_dev_auth_user(&pool, config.dev_auth_email).await?;
 
     let app_state = AppState {
         pool,
@@ -120,9 +75,15 @@ async fn main() {
     let app = app.layer(LiveReloadLayer::new());
 
     let addr = format!("{}:{}", config.host, config.port);
-    let listener = TcpListener::bind(&addr).await.unwrap();
+    let listener = TcpListener::bind(&addr)
+        .await
+        .map_err(|err| AppError::Internal(format!("Failed to bind {addr}: {err}")))?;
     info!("listening on {}", addr);
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app)
+        .await
+        .map_err(|err| AppError::Internal(format!("Server error: {err}")))?;
+
+    Ok(())
 }
 
 fn build_security_headers() -> SecurityHeadersLayer {
@@ -153,4 +114,21 @@ fn build_security_headers() -> SecurityHeadersLayer {
         .unwrap();
 
     SecurityHeadersLayer::new(Arc::new(headers))
+}
+
+#[cfg(feature = "dev")]
+async fn setup_dev_auth_user(pool: &Pool, dev_auth_email: Option<String>) -> Result<(), AppError> {
+    let Some(dev_auth_email) = dev_auth_email else {
+        return Ok(());
+    };
+
+    let user = deesl::user::create_user_if_not_exists(
+        pool,
+        deesl::models::NewUser::for_email(dev_auth_email),
+    )
+    .await?;
+
+    tracing::info!("dev auth bypass user ready: {}", user.email);
+
+    Ok(())
 }

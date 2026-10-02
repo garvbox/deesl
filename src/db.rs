@@ -3,8 +3,22 @@ use axum::{
     http::request::Parts,
 };
 use deadpool_diesel::postgres::{Object, Pool};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 
 use crate::error::AppError;
+
+const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
+
+pub async fn run_migrations(pool: &Pool) -> Result<(), AppError> {
+    let conn = pool.get().await?;
+
+    conn.interact(|conn| {
+        conn.run_pending_migrations(MIGRATIONS)
+            .map(|_| ())
+            .map_err(|err| AppError::Internal(format!("Failed to run migrations: {err}")))
+    })
+    .await?
+}
 
 /// Custom extractor for database connections.
 /// This simplifies handlers by removing the need to manually call `pool.get().await`.
