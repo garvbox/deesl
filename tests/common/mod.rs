@@ -8,14 +8,12 @@ use deesl::auth::AuthConfig;
 use deesl::models::{NewFuelStation, NewUser, NewVehicle};
 use deesl::schema::{fuel_stations, users, vehicles};
 
-/// Test user data for creating test fixtures
 #[derive(Clone)]
 pub struct TestUser {
     pub id: i32,
     pub token: String,
 }
 
-/// Creates a test database pool connected to the test database
 pub async fn create_test_pool() -> Pool {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/deesl_test".to_string());
@@ -31,7 +29,6 @@ pub async fn create_test_pool() -> Pool {
     pool
 }
 
-/// Creates a test app with the given database pool
 pub async fn create_test_app(pool: Pool) -> Router {
     let app_state = deesl::AppState {
         pool,
@@ -42,26 +39,19 @@ pub async fn create_test_app(pool: Pool) -> Router {
     deesl::app::build_router(app_state)
 }
 
-/// Creates a JWT token for a test user
 pub fn create_test_token(user_id: i32, email: &str) -> String {
     let auth_config = AuthConfig::new("test-secret", 168);
     auth_config.create_token(user_id, email).unwrap()
 }
 
-// ============================================================================
-// AXUM-TEST BASED HELPERS
-// ============================================================================
-
 use axum_test::TestResponse;
 use axum_test::TestServer;
 
-/// Test environment using axum-test's TestServer for cleaner testing
 pub struct TestEnv {
     pub server: TestServer,
     pub pool: Pool,
 }
 
-/// Creates a test environment with axum-test TestServer
 pub async fn create_test_env() -> TestEnv {
     let pool = create_test_pool().await;
     let app = create_test_app(pool.clone()).await;
@@ -70,13 +60,11 @@ pub async fn create_test_env() -> TestEnv {
     TestEnv { server, pool }
 }
 
-/// Creates a test user and returns the user with a configured server
 pub async fn create_test_user(env: &TestEnv, prefix: &str) -> TestUser {
     let email = format!("{}_{}@test.com", prefix, uuid::Uuid::new_v4());
     create_test_user_db(&env.pool, &email).await
 }
 
-/// Extension trait for TestServer to add authentication
 pub trait AuthenticatedRequest {
     fn with_auth(self, token: &str) -> Self;
 }
@@ -87,7 +75,6 @@ impl AuthenticatedRequest for axum_test::TestRequest {
     }
 }
 
-/// Creates a test user in the database
 pub async fn create_test_user_db(pool: &Pool, email: &str) -> TestUser {
     let conn = pool.get().await.unwrap();
     let email = email.to_string();
@@ -107,7 +94,6 @@ pub async fn create_test_user_db(pool: &Pool, email: &str) -> TestUser {
     TestUser { id: user.id, token }
 }
 
-/// Creates a test vehicle in the database. Registrations are unique per owner.
 pub async fn create_test_vehicle_db(
     pool: &Pool,
     owner_id: i32,
@@ -138,13 +124,11 @@ pub async fn create_test_vehicle_db(
     vehicle.id
 }
 
-/// Creates a test vehicle with a unique registration for the given owner.
 pub async fn create_unique_vehicle_db(pool: &Pool, owner_id: i32) -> i32 {
     let registration = format!("REG-{}", uuid::Uuid::new_v4());
     create_test_vehicle_db(pool, owner_id, "Make", "Model", &registration).await
 }
 
-/// Creates a vehicle share in the database
 pub async fn create_test_vehicle_share_db(
     pool: &Pool,
     vehicle_id: i32,
@@ -168,7 +152,6 @@ pub async fn create_test_vehicle_share_db(
     .unwrap();
 }
 
-/// Creates a test fuel station owned by the given user in the database
 pub async fn create_test_station_db(pool: &Pool, user_id: i32, name: &str) -> i32 {
     let conn = pool.get().await.unwrap();
     let name = name.to_string();
@@ -189,7 +172,6 @@ pub async fn create_test_station_db(pool: &Pool, user_id: i32, name: &str) -> i3
     station.id
 }
 
-/// Creates a global (user_id IS NULL) fuel station in the database
 pub async fn create_test_global_station_db(pool: &Pool, name: &str) -> i32 {
     let conn = pool.get().await.unwrap();
     let name = name.to_string();
@@ -210,7 +192,6 @@ pub async fn create_test_global_station_db(pool: &Pool, name: &str) -> i32 {
     station.id
 }
 
-/// Creates a fuel entry directly in the database and returns its id
 pub async fn create_test_entry_db(
     pool: &Pool,
     vehicle_id: i32,
@@ -272,7 +253,6 @@ pub async fn post_import_csv(
         .await
 }
 
-/// Posts import execute data as form (not multipart, since file is already stored)
 pub async fn post_import_execute(
     server: &TestServer,
     token: &str,
@@ -297,18 +277,15 @@ pub async fn post_import_execute(
         .await
 }
 
-/// Asserts a response is a 303 redirect to `/login`
 pub fn assert_login_redirect(response: &TestResponse) {
     response.assert_status(axum::http::StatusCode::SEE_OTHER);
     assert_eq!(response.header("location"), "/login");
 }
 
-/// Asserts a response is a 401 Unauthorized
 pub fn assert_unauthorized(response: &TestResponse) {
     response.assert_status(axum::http::StatusCode::UNAUTHORIZED);
 }
 
-/// Asserts an HTMX redirect: both the `HX-Redirect` header and the 303 Location
 pub fn assert_hx_redirect(response: &TestResponse, path: &str) {
     response.assert_status(axum::http::StatusCode::SEE_OTHER);
     assert_eq!(response.header("HX-Redirect"), path);
