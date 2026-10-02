@@ -20,19 +20,11 @@ pub async fn create_test_pool() -> Pool {
     let manager = Manager::new(database_url, deadpool_diesel::Runtime::Tokio1);
     let pool = Pool::builder(manager).build().unwrap();
 
-    // Run migrations (only needed for first test, diesel tracks which ran)
-    let conn = pool
-        .get()
-        .await
-        .expect("Failed to get connection from pool");
-    let _ = conn
-        .interact(|conn| {
-            use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
-            const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
-            // Use ignore to avoid panicking if migrations already ran or table exists
-            let _ = conn.run_pending_migrations(MIGRATIONS);
-        })
-        .await;
+    // Tests share a database and build their pool concurrently, so a failure here is
+    // usually a lost race on `__diesel_schema_migrations` rather than a broken schema.
+    if let Err(err) = deesl::db::run_migrations(&pool).await {
+        tracing::warn!("migrations reported: {:?}", err);
+    }
 
     pool
 }
@@ -121,14 +113,7 @@ pub async fn create_test_user_db(pool: &Pool, email: &str) -> TestUser {
     let user: deesl::models::User = conn
         .interact(move |conn| {
             diesel::insert_into(users::table)
-                .values(NewUser {
-                    email: email.clone(),
-                    password_hash: None,
-                    currency: "EUR".to_string(),
-                    google_id: None,
-                    distance_unit: "km".to_string(),
-                    volume_unit: "L".to_string(),
-                })
+                .values(NewUser::for_email(&email))
                 .get_result(conn)
         })
         .await
