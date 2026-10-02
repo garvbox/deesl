@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use axum::Router;
 use deadpool_diesel::postgres::{Manager, Pool};
 use diesel::prelude::*;
@@ -31,33 +33,13 @@ pub async fn create_test_pool() -> Pool {
 
 /// Creates a test app with the given database pool
 pub async fn create_test_app(pool: Pool) -> Router {
-    use axum::routing::get;
-    use deesl::handlers;
-    use deesl::oauth_handlers;
-    use tower_http::trace::TraceLayer;
-
     let app_state = deesl::AppState {
         pool,
-        oauth: oauth_handlers::OAuthConfig::test_config(),
-        auth: deesl::auth::AuthConfig::new("test-secret", 168),
+        oauth: deesl::oauth_handlers::OAuthConfig::test_config(),
+        auth: AuthConfig::new("test-secret", 168),
     };
 
-    Router::new()
-        .route(
-            "/",
-            get(|| async { axum::response::Redirect::to("/dashboard") }),
-        )
-        .merge(handlers::auth::router())
-        .merge(handlers::misc::router())
-        .merge(handlers::settings::router())
-        .nest("/vehicles", handlers::vehicles::router())
-        .nest("/fuel-entries", handlers::fuel_entries::router())
-        .nest("/stations", handlers::stations::router())
-        .nest("/stats", handlers::stats::router())
-        .nest("/import", handlers::import::router())
-        .merge(oauth_handlers::router())
-        .layer(TraceLayer::new_for_http())
-        .with_state(app_state)
+    deesl::app::build_router(app_state)
 }
 
 /// Creates a JWT token for a test user
@@ -125,7 +107,7 @@ pub async fn create_test_user_db(pool: &Pool, email: &str) -> TestUser {
     TestUser { id: user.id, token }
 }
 
-/// Creates a test vehicle in the database
+/// Creates a test vehicle in the database. Registrations are unique per owner.
 pub async fn create_test_vehicle_db(
     pool: &Pool,
     owner_id: i32,
@@ -156,6 +138,12 @@ pub async fn create_test_vehicle_db(
     vehicle.id
 }
 
+/// Creates a test vehicle with a unique registration for the given owner.
+pub async fn create_unique_vehicle_db(pool: &Pool, owner_id: i32) -> i32 {
+    let registration = format!("REG-{}", uuid::Uuid::new_v4());
+    create_test_vehicle_db(pool, owner_id, "Make", "Model", &registration).await
+}
+
 /// Creates a vehicle share in the database
 pub async fn create_test_vehicle_share_db(
     pool: &Pool,
@@ -180,7 +168,7 @@ pub async fn create_test_vehicle_share_db(
     .unwrap();
 }
 
-/// Creates a test fuel station in the database
+/// Creates a test fuel station owned by the given user in the database
 pub async fn create_test_station_db(pool: &Pool, user_id: i32, name: &str) -> i32 {
     let conn = pool.get().await.unwrap();
     let name = name.to_string();
@@ -199,6 +187,59 @@ pub async fn create_test_station_db(pool: &Pool, user_id: i32, name: &str) -> i3
         .unwrap();
 
     station.id
+}
+
+/// Creates a global (user_id IS NULL) fuel station in the database
+pub async fn create_test_global_station_db(pool: &Pool, name: &str) -> i32 {
+    let conn = pool.get().await.unwrap();
+    let name = name.to_string();
+
+    let station: deesl::models::FuelStation = conn
+        .interact(move |conn| {
+            diesel::insert_into(fuel_stations::table)
+                .values(NewFuelStation {
+                    name,
+                    user_id: None,
+                })
+                .get_result(conn)
+        })
+        .await
+        .unwrap()
+        .unwrap();
+
+    station.id
+}
+
+/// Creates a fuel entry directly in the database and returns its id
+pub async fn create_test_entry_db(
+    pool: &Pool,
+    vehicle_id: i32,
+    station_id: Option<i32>,
+    mileage_km: i32,
+    litres: f64,
+    cost: f64,
+    filled_at: chrono::NaiveDateTime,
+) -> i32 {
+    let conn = pool.get().await.unwrap();
+
+    let entry: deesl::models::FuelEntry = conn
+        .interact(move |conn| {
+            diesel::insert_into(deesl::schema::fuel_entries::table)
+                .values((
+                    deesl::schema::fuel_entries::vehicle_id.eq(vehicle_id),
+                    deesl::schema::fuel_entries::station_id.eq(station_id),
+                    deesl::schema::fuel_entries::mileage_km.eq(mileage_km),
+                    deesl::schema::fuel_entries::litres.eq(litres),
+                    deesl::schema::fuel_entries::cost.eq(cost),
+                    deesl::schema::fuel_entries::filled_at.eq(filled_at),
+                ))
+                .get_result(conn)
+        })
+        .await
+        .unwrap()
+        .unwrap();
+
+    entry.id
 }
 
 pub async fn post_import_csv(
@@ -254,4 +295,22 @@ pub async fn post_import_execute(
         .add_header("Cookie", format!("auth_token={}", token))
         .form(&form_data)
         .await
+}
+
+/// Asserts a response is a 303 redirect to `/login`
+pub fn assert_login_redirect(response: &TestResponse) {
+    response.assert_status(axum::http::StatusCode::SEE_OTHER);
+    assert_eq!(response.header("location"), "/login");
+}
+
+/// Asserts a response is a 401 Unauthorized
+pub fn assert_unauthorized(response: &TestResponse) {
+    response.assert_status(axum::http::StatusCode::UNAUTHORIZED);
+}
+
+/// Asserts an HTMX redirect: both the `HX-Redirect` header and the 303 Location
+pub fn assert_hx_redirect(response: &TestResponse, path: &str) {
+    response.assert_status(axum::http::StatusCode::SEE_OTHER);
+    assert_eq!(response.header("HX-Redirect"), path);
+    assert_eq!(response.header("location"), path);
 }
