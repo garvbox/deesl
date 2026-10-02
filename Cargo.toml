@@ -18,13 +18,13 @@ dev = []
 [dependencies]
 askama = { version = "0.12.1", features = ["serde-json"] }
 axum = { version = "0.8.8", features = ["json", "tokio", "form", "multipart"] }
-axum-extra = { version = "0.10", features = ["typed-header"] }
+axum-extra = { version = "0.12.6", features = ["typed-header"] }
 chrono = { version = "0.4.44", features = ["serde"] }
 csv = "1.4"
-deadpool = "0.6"
-deadpool-diesel = { version = "0.6.1", features = ["postgres"] }
+deadpool = "0.13.1"
+deadpool-diesel = { version = "0.7.0", features = ["postgres"] }
 diesel = { version = "2.3.6", features = ["postgres", "chrono", "uuid"] }
-diesel_migrations = { version = "2.2.0", features = ["postgres"] }
+diesel_migrations = { version = "2.3.2", features = ["postgres"] }
 dotenvy = "0.15.7"
 headers = "0.4"
 http = "1"
@@ -39,8 +39,8 @@ tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread"] }
 tokio-util = "0.7.18"
 tower = "0.5"
 tower-cookies = "0.11"
-tower-http = { version = "0.6.8", features = ["trace", "fs"] }
-tower-livereload = "0.9.6"
+tower-http = { version = "0.7.1", features = ["trace", "fs"] }
+tower-livereload = "0.10.3"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.22"
 urlencoding = "2.1.3"
