@@ -12,7 +12,7 @@ use tracing::info;
 #[cfg(feature = "dev")]
 use tower_livereload::LiveReloadLayer;
 
-use deesl::{AppConfig, AppError, AppState, handlers, oauth_handlers};
+use deesl::{AppConfig, AppError, AppState, db::run_migrations, handlers, oauth_handlers};
 
 async fn serve_version() -> axum::response::Json<serde_json::Value> {
     const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -24,7 +24,7 @@ async fn health() -> axum::response::Json<serde_json::Value> {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), AppError> {
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt::init();
 
@@ -36,16 +36,10 @@ async fn main() {
         .build()
         .expect("Failed to create pool");
 
-    if let Err(err) = run_migrations(&pool).await {
-        tracing::error!("Failed to run migrations: {:?}", err);
-        return;
-    }
+    run_migrations(&pool).await?;
 
     #[cfg(feature = "dev")]
-    if let Err(err) = setup_dev_auth_user(&pool, config.dev_auth_email).await {
-        tracing::error!("Failed to set up dev user: {:?}", err);
-        return;
-    }
+    setup_dev_auth_user(&pool, config.dev_auth_email).await?;
 
     let app_state = AppState {
         pool,
@@ -81,9 +75,15 @@ async fn main() {
     let app = app.layer(LiveReloadLayer::new());
 
     let addr = format!("{}:{}", config.host, config.port);
-    let listener = TcpListener::bind(&addr).await.unwrap();
+    let listener = TcpListener::bind(&addr)
+        .await
+        .map_err(|err| AppError::Internal(format!("Failed to bind {addr}: {err}")))?;
     info!("listening on {}", addr);
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app)
+        .await
+        .map_err(|err| AppError::Internal(format!("Server error: {err}")))?;
+
+    Ok(())
 }
 
 fn build_security_headers() -> SecurityHeadersLayer {
@@ -116,42 +116,19 @@ fn build_security_headers() -> SecurityHeadersLayer {
     SecurityHeadersLayer::new(Arc::new(headers))
 }
 
-async fn run_migrations(pool: &Pool) -> Result<(), AppError> {
-    let conn = pool.get().await?;
-
-    conn.interact(|conn| {
-        use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
-        const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
-        conn.run_pending_migrations(MIGRATIONS)
-            .expect("Failed to run migrations");
-    })
-    .await
-    .expect("Failed to interact with database");
-
-    Ok(())
-}
-
 #[cfg(feature = "dev")]
 async fn setup_dev_auth_user(pool: &Pool, dev_auth_email: Option<String>) -> Result<(), AppError> {
-    tracing::trace!(
-        "checking dev auth user for bypass exists: {:?}",
-        dev_auth_email
-    );
-
-    if let Some(dev_auth_email) = dev_auth_email {
-        deesl::user::create_user_if_not_exists(
-            pool,
-            deesl::models::NewUser {
-                email: dev_auth_email,
-                password_hash: None,
-                google_id: None,
-                currency: "EUR".to_string(),
-                distance_unit: "km".to_string(),
-                volume_unit: "L".to_string(),
-            },
-        )
-        .await?;
+    let Some(dev_auth_email) = dev_auth_email else {
+        return Ok(());
     };
+
+    let user = deesl::user::create_user_if_not_exists(
+        pool,
+        deesl::models::NewUser::for_email(dev_auth_email),
+    )
+    .await?;
+
+    tracing::info!("dev auth bypass user ready: {}", user.email);
 
     Ok(())
 }
