@@ -18,6 +18,7 @@ async fn test_logout_redirects_and_clears_cookie() {
     let cookie = response.header("set-cookie").to_str().unwrap().to_string();
     assert!(cookie.contains("auth_token=;"));
     assert!(cookie.contains("Max-Age=0"));
+    assert!(!cookie.contains("Secure"));
 }
 
 #[tokio::test]
@@ -158,6 +159,95 @@ async fn test_google_login_redirects_to_google_and_sets_csrf_cookie() {
             .to_str()
             .unwrap()
             .contains("oauth_csrf=")
+    );
+}
+
+#[tokio::test]
+async fn test_google_callback_sets_both_cookies_when_oauth_succeeds() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "access_token": "fake-access-token",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+        })))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/userinfo"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "sub": format!("google-sub-{}", uuid::Uuid::new_v4()),
+            "email": format!("callback_{}@test.com", uuid::Uuid::new_v4()),
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let env = common::create_test_env_with_oauth(
+        deesl::oauth_handlers::OAuthConfig::test_config_with_base_url(&mock_server.uri()),
+    )
+    .await;
+
+    let login_response = env.server.get("/auth/google").await;
+    login_response.assert_status(StatusCode::FOUND);
+
+    let csrf_pair = login_response
+        .header("set-cookie")
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+
+    let location = login_response.header("location");
+    let state = location
+        .to_str()
+        .unwrap()
+        .split("state=")
+        .nth(1)
+        .unwrap()
+        .split('&')
+        .next()
+        .unwrap();
+
+    let response = env
+        .server
+        .get(&format!("/auth/google/callback?code=abc&state={state}"))
+        .add_header("Cookie", &csrf_pair)
+        .await;
+
+    response.assert_status(StatusCode::SEE_OTHER);
+    assert_eq!(response.header("location"), "/dashboard");
+
+    let cookies: Vec<String> = response
+        .headers()
+        .get_all("set-cookie")
+        .iter()
+        .map(|value| value.to_str().unwrap().to_string())
+        .collect();
+
+    assert_eq!(
+        cookies.len(),
+        2,
+        "expected both the oauth_csrf clear-cookie and the auth_token cookie, got: {cookies:?}"
+    );
+    assert!(
+        cookies
+            .iter()
+            .any(|cookie| cookie.starts_with("oauth_csrf=;") && cookie.contains("Max-Age=0")),
+        "missing oauth_csrf clear-cookie in: {cookies:?}"
+    );
+    assert!(
+        cookies
+            .iter()
+            .any(|cookie| cookie.starts_with("auth_token=") && !cookie.starts_with("auth_token=;")),
+        "missing auth_token cookie in: {cookies:?}"
     );
 }
 
