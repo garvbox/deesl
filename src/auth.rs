@@ -1,7 +1,7 @@
 use axum::{
     extract::{FromRef, FromRequestParts},
     http::{HeaderMap, request::Parts},
-    response::Redirect,
+    response::{IntoResponse, Redirect, Response},
 };
 use deadpool_diesel::postgres::Pool;
 use diesel::prelude::*;
@@ -113,14 +113,15 @@ where
     Pool: FromRef<S>,
     S: Send + Sync,
 {
-    type Rejection = Redirect;
+    type Rejection = Response;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let auth_config = AuthConfig::from_ref(state);
         let pool = Pool::from_ref(state);
         match extract_auth_user(&parts.headers, &auth_config, &pool).await {
             Ok(user) => Ok(AuthUserRedirect(user)),
-            Err(_) => Err(Redirect::to("/login")),
+            Err(AppError::Unauthorized(_)) => Err(Redirect::to("/login").into_response()),
+            Err(err) => Err(err.into_response()),
         }
     }
 }

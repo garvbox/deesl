@@ -6,8 +6,6 @@ upcoming refactor.
 
 ## Auth / OAuth
 
-- `AuthUserRedirect` maps every failure (including DB/internal errors) to a `/login`
-  redirect, hiding server faults. See `src/auth.rs:118-125`.
 - `is_dev_auth_bypass_allowed` checks only the `DEV_AUTH_EMAIL` env var and ignores the
   request headers/host, so when the `dev` feature is built with the var set, any request
   is authenticated as user id 1. See `src/auth.rs:128-137`.
