@@ -79,10 +79,28 @@ When set, all requests from localhost are treated as authenticated.
 - Use `AuthUser` extractor for API/HTMX endpoints (returns 401 on failure).
 - Use `AuthUserRedirect` extractor for full-page SSR endpoints (redirects to `/login` on failure).
 
+## Conventional Commits
+
+All commits must follow the [Conventional Commits](https://www.conventionalcommits.org/) format:
+
+```
+type(scope)!: description
+```
+
+- **Allowed types**: `feat`, `fix`, `chore`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`, `style`, `revert`.
+- **Breaking changes**: mark with a `!` after the type/scope (e.g. `feat!:`), or include a `BREAKING CHANGE:` footer.
+- **Release type** is derived from the commits:
+  - breaking change → `major`
+  - `feat` → `minor`
+  - `fix` → `patch`
+  - anything else → no release
+
+A PR check enforces this format and labels each pull request with the resulting `release: <type>`. Version bumps are automated on merge, so do **not** manually commit "Bump version to X" changes.
+
 ## Key Patterns
 
 ### Version Bumps
-When bumping the version in `Cargo.toml`, always run `cargo check` or `cargo build` afterward to verify the change compiles correctly before committing.
+Version bumps are handled automatically by the release workflow on merge to `main`. If you must bump the version manually, always run `cargo check` or `cargo build` afterward to verify the change compiles correctly before committing.
 
 ### HTMX Partial Update Handler
 ```rust
