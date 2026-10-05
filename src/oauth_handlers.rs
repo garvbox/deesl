@@ -39,6 +39,7 @@ fn build_clear_cookie(name: &str, is_development: bool) -> String {
 #[derive(Clone)]
 pub struct OAuthConfig {
     pub client: BasicClient,
+    pub userinfo_url: String,
     pub is_development: bool,
 }
 
@@ -60,6 +61,7 @@ impl OAuthConfig {
 
         Self {
             client,
+            userinfo_url: "https://www.googleapis.com/oauth2/v3/userinfo".to_string(),
             is_development: cfg!(feature = "dev"),
         }
     }
@@ -82,6 +84,26 @@ impl OAuthConfig {
 
         Self {
             client,
+            userinfo_url: "https://www.googleapis.com/oauth2/v3/userinfo".to_string(),
+            is_development: true,
+        }
+    }
+
+    pub fn test_config_with_base_url(base_url: &str) -> Self {
+        let client = BasicClient::new(
+            ClientId::new("test-client-id".to_string()),
+            Some(ClientSecret::new("test-client-secret".to_string())),
+            AuthUrl::new(format!("{base_url}/auth")).expect("Invalid auth URL"),
+            Some(TokenUrl::new(format!("{base_url}/token")).expect("Invalid token URL")),
+        )
+        .set_redirect_uri(
+            RedirectUrl::new("http://localhost:8000/auth/google/callback".to_string())
+                .expect("Invalid redirect URL"),
+        );
+
+        Self {
+            client,
+            userinfo_url: format!("{base_url}/userinfo"),
             is_development: true,
         }
     }
@@ -151,7 +173,7 @@ pub async fn google_callback(
         .map_err(|e| AppError::Internal(format!("Token exchange failed: {e}")))?;
 
     let user_info: GoogleUserInfo = reqwest::Client::new()
-        .get("https://www.googleapis.com/oauth2/v3/userinfo")
+        .get(&state.oauth.userinfo_url)
         .bearer_auth(token_result.access_token().secret())
         .send()
         .await
