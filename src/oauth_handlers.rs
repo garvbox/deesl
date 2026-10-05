@@ -232,8 +232,8 @@ pub async fn get_current_user(
     }))
 }
 
-pub async fn logout() -> impl IntoResponse {
-    let clear_cookie = build_clear_cookie("auth_token", false);
+pub async fn logout(State(state): State<AppState>) -> impl IntoResponse {
+    let clear_cookie = build_clear_cookie("auth_token", state.oauth.is_development);
     let mut resp_headers = HeaderMap::new();
     resp_headers.insert(header::SET_COOKIE, clear_cookie.parse().unwrap());
     (resp_headers, Redirect::to("/login"))

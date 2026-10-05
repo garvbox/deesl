@@ -18,6 +18,7 @@ async fn test_logout_redirects_and_clears_cookie() {
     let cookie = response.header("set-cookie").to_str().unwrap().to_string();
     assert!(cookie.contains("auth_token=;"));
     assert!(cookie.contains("Max-Age=0"));
+    assert!(!cookie.contains("Secure"));
 }
 
 #[tokio::test]
