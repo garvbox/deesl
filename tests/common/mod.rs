@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 
-use axum::Router;
 use deadpool_diesel::postgres::{Manager, Pool};
 use diesel::prelude::*;
 
@@ -29,16 +28,6 @@ pub async fn create_test_pool() -> Pool {
     pool
 }
 
-pub async fn create_test_app(pool: Pool) -> Router {
-    let app_state = deesl::AppState {
-        pool,
-        oauth: deesl::oauth_handlers::OAuthConfig::test_config(),
-        auth: AuthConfig::new("test-secret", 168),
-    };
-
-    deesl::app::build_router(app_state)
-}
-
 pub fn create_test_token(user_id: i32, email: &str) -> String {
     let auth_config = AuthConfig::new("test-secret", 168);
     auth_config.create_token(user_id, email).unwrap()
@@ -53,8 +42,21 @@ pub struct TestEnv {
 }
 
 pub async fn create_test_env() -> TestEnv {
+    build_test_env(deesl::oauth_handlers::OAuthConfig::test_config()).await
+}
+
+pub async fn create_test_env_with_oauth(oauth: deesl::oauth_handlers::OAuthConfig) -> TestEnv {
+    build_test_env(oauth).await
+}
+
+async fn build_test_env(oauth: deesl::oauth_handlers::OAuthConfig) -> TestEnv {
     let pool = create_test_pool().await;
-    let app = create_test_app(pool.clone()).await;
+    let app_state = deesl::AppState {
+        pool: pool.clone(),
+        oauth,
+        auth: AuthConfig::new("test-secret", 168),
+    };
+    let app = deesl::app::build_router(app_state);
     let server = TestServer::new(app).unwrap();
 
     TestEnv { server, pool }
