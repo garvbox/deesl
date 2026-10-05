@@ -208,8 +208,8 @@ pub async fn google_callback(
     let auth_cookie = build_cookie("auth_token", &jwt, 604800, state.oauth.is_development);
 
     let mut resp_headers = HeaderMap::new();
-    resp_headers.insert(header::SET_COOKIE, clear_csrf_cookie.parse().unwrap());
-    resp_headers.insert(header::SET_COOKIE, auth_cookie.parse().unwrap());
+    resp_headers.append(header::SET_COOKIE, clear_csrf_cookie.parse().unwrap());
+    resp_headers.append(header::SET_COOKIE, auth_cookie.parse().unwrap());
 
     Ok((resp_headers, Redirect::to("/dashboard")))
 }

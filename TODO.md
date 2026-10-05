@@ -6,9 +6,6 @@ upcoming refactor.
 
 ## Auth / OAuth
 
-- `google_callback` sets two `SET_COOKIE` values with `HeaderMap::insert`, so the second
-  overwrites the first. The `oauth_csrf` clear-cookie is dropped and only `auth_token` is
-  actually set. See `src/oauth_handlers.rs:210-212`.
 - `AuthUserRedirect` maps every failure (including DB/internal errors) to a `/login`
   redirect, hiding server faults. See `src/auth.rs:118-125`.
 - `is_dev_auth_bypass_allowed` checks only the `DEV_AUTH_EMAIL` env var and ignores the
