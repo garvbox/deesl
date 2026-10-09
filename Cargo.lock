@@ -553,7 +553,7 @@ dependencies = [
 
 [[package]]
 name = "deesl"
-version = "0.8.10"
+version = "0.9.0"
 dependencies = [
  "askama",
  "axum",
