@@ -1,9 +1,15 @@
 name: Release
 
+# Ignore pushes that only touch the version files. The release workflow pushes
+# such a commit itself, which would otherwise trigger a needless second run.
+# All other pushes to main still release.
 on:
   push:
     branches:
       - main
+    paths-ignore:
+      - Cargo.toml
+      - Cargo.lock
 
 permissions:
   contents: write
@@ -16,7 +22,6 @@ env:
 jobs:
   release:
     runs-on: ubuntu-latest
-    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
