@@ -134,7 +134,7 @@ async fn test_htmx_delete_vehicle() {
 }
 
 #[tokio::test]
-async fn test_htmx_delete_vehicle_when_not_owner_keeps_vehicle() {
+async fn test_htmx_delete_vehicle_when_not_owner_returns_not_found() {
     let env = common::create_test_env().await;
     let owner = common::create_test_user(&env, "delete_owner").await;
     let other = common::create_test_user(&env, "delete_other").await;
@@ -147,13 +147,12 @@ async fn test_htmx_delete_vehicle_when_not_owner_keeps_vehicle() {
         .with_auth(&other.token)
         .await;
 
-    response.assert_status_ok();
-    assert_eq!(response.text(), "");
+    response.assert_status(StatusCode::NOT_FOUND);
     assert!(vehicle_exists(&env.pool, vehicle_id).await);
 }
 
 #[tokio::test]
-async fn test_htmx_delete_vehicle_when_missing_returns_ok() {
+async fn test_htmx_delete_vehicle_when_missing_returns_not_found() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "delete_missing").await;
 
@@ -163,6 +162,5 @@ async fn test_htmx_delete_vehicle_when_missing_returns_ok() {
         .with_auth(&user.token)
         .await;
 
-    response.assert_status_ok();
-    assert_eq!(response.text(), "");
+    response.assert_status(StatusCode::NOT_FOUND);
 }
