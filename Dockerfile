@@ -1,6 +1,6 @@
 ###########################################
 # -- Chef Base --
-FROM rust:bookworm AS chef
+FROM public.ecr.aws/docker/library/rust:bookworm AS chef
 
 RUN apt-get update && apt-get install -y \
     pkg-config \
@@ -31,7 +31,7 @@ RUN cargo build --release
 
 ###########################################
 # -- App Stage --
-FROM debian:bookworm-slim
+FROM public.ecr.aws/docker/library/debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
