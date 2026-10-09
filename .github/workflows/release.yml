@@ -44,13 +44,9 @@ jobs:
         if: steps.bump.outputs.released == 'true'
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Rust build artifacts
+      - name: Sync Cargo.lock
         if: steps.bump.outputs.released == 'true'
-        uses: Swatinem/rust-cache@v2
-
-      - name: Sync Cargo.lock and verify build
-        if: steps.bump.outputs.released == 'true'
-        run: cargo check
+        run: cargo update --workspace
 
       - name: Commit version bump
         if: steps.bump.outputs.released == 'true'
