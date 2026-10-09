@@ -22,8 +22,15 @@ async fn main() -> Result<(), AppError> {
 
     run_migrations(&pool).await?;
 
+    let auth = deesl::auth::AuthConfig::new(&config.jwt_secret, config.jwt_expiration_hours);
+
     #[cfg(feature = "dev")]
-    setup_dev_auth_user(&pool, config.dev_auth_email).await?;
+    let auth = {
+        let dev_user = setup_dev_auth_user(&pool, config.dev_auth_email).await?;
+        let mut auth = auth.clone();
+        auth.dev_user = Some(dev_user);
+        auth
+    };
 
     let app_state = AppState {
         pool,
@@ -32,7 +39,7 @@ async fn main() -> Result<(), AppError> {
             &config.google_client_secret,
             &config.base_url,
         ),
-        auth: deesl::auth::AuthConfig::new(&config.jwt_secret, config.jwt_expiration_hours),
+        auth,
     };
 
     let app = build_router(app_state);
@@ -53,18 +60,20 @@ async fn main() -> Result<(), AppError> {
 }
 
 #[cfg(feature = "dev")]
-async fn setup_dev_auth_user(pool: &Pool, dev_auth_email: Option<String>) -> Result<(), AppError> {
-    let Some(dev_auth_email) = dev_auth_email else {
-        return Ok(());
-    };
-
+async fn setup_dev_auth_user(
+    pool: &Pool,
+    dev_auth_email: Option<String>,
+) -> Result<deesl::auth::AuthUser, AppError> {
     let user = deesl::user::create_user_if_not_exists(
         pool,
-        deesl::models::NewUser::for_email(dev_auth_email),
+        deesl::models::NewUser::for_email(dev_auth_email.expect("Missing dev email")),
     )
     .await?;
 
     tracing::info!("dev auth bypass user ready: {}", user.email);
 
-    Ok(())
+    Ok(deesl::auth::AuthUser {
+        user_id: user.id,
+        email: user.email,
+    })
 }
