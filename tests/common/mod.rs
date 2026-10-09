@@ -1,10 +1,13 @@
 #![allow(dead_code)]
 
+use axum_test::TestResponse;
+use axum_test::TestServer;
 use deadpool_diesel::postgres::{Manager, Pool};
+use deesl::oauth_handlers::OAuthConfig;
 use diesel::prelude::*;
 use std::sync::{Arc, Mutex};
 
-use deesl::auth::AuthConfig;
+use deesl::auth::{AuthConfig, AuthUser};
 use deesl::models::{NewFuelStation, NewUser, NewVehicle};
 use deesl::schema::{fuel_stations, users, vehicles};
 
@@ -12,6 +15,7 @@ use deesl::schema::{fuel_stations, users, vehicles};
 pub struct TestUser {
     pub id: i32,
     pub token: String,
+    pub email: String,
 }
 
 pub async fn create_test_pool() -> Pool {
@@ -33,9 +37,6 @@ pub fn create_test_token(user_id: i32, email: &str) -> String {
     let auth_config = AuthConfig::new("test-secret", 168);
     auth_config.create_token(user_id, email).unwrap()
 }
-
-use axum_test::TestResponse;
-use axum_test::TestServer;
 
 pub struct TestEnv {
     pub server: TestServer,
@@ -90,22 +91,71 @@ async fn delete_users(pool: &Pool, ids: &[i32]) {
         .await;
 }
 
-async fn build_test_env(oauth: deesl::oauth_handlers::OAuthConfig) -> TestEnv {
-    let pool = create_test_pool().await;
+#[derive(Default)]
+pub struct TestEnvOptions {
+    pub pool: Option<Pool>,
+    pub oauth: Option<OAuthConfig>,
+    pub auth: Option<AuthConfig>,
+}
+
+impl TestEnvOptions {
+    pub async fn with_dev_user(prefix: &str) -> (Self, TestUser) {
+        let pool = create_test_pool().await;
+        let user = create_test_user_db(&pool, &unique_email(prefix)).await;
+        let auth = AuthConfig::with_dev_user(AuthUser {
+            user_id: user.id,
+            email: user.email.clone(),
+        });
+        let options = Self {
+            pool: Some(pool),
+            auth: Some(auth),
+            ..Default::default()
+        };
+        (options, user)
+    }
+}
+
+pub async fn create_test_env() -> TestEnv {
+    create_test_env_with(TestEnvOptions::default()).await
+}
+
+pub async fn create_test_env_with(options: TestEnvOptions) -> TestEnv {
+    let pool = match options.pool {
+        Some(pool) => pool,
+        None => create_test_pool().await,
+    };
+
     let app_state = deesl::AppState {
         pool: pool.clone(),
-        oauth,
-        auth: AuthConfig::new("test-secret", 168),
+        oauth: options.oauth.unwrap_or_else(OAuthConfig::test_config),
+        auth: options
+            .auth
+            .unwrap_or_else(|| AuthConfig::new("test-secret", 168)),
     };
+    let dev_user_id = app_state.auth.dev_user.as_ref().map(|user| user.user_id);
     let app = deesl::app::build_router(app_state);
     let server = TestServer::new(app).unwrap();
 
-    TestEnv { server, pool }
+    let tracked_user_ids = Arc::new(Mutex::new(Vec::new()));
+    if let Some(id) = dev_user_id {
+        tracked_user_ids.lock().unwrap().push(id);
+    }
+
+    TestEnv {
+        server,
+        pool,
+        tracked_user_ids,
+    }
+}
+
+pub fn unique_email(prefix: &str) -> String {
+    format!("{}_{}@test.com", prefix, uuid::Uuid::new_v4())
 }
 
 pub async fn create_test_user(env: &TestEnv, prefix: &str) -> TestUser {
-    let email = format!("{}_{}@test.com", prefix, uuid::Uuid::new_v4());
-    create_test_user_db(&env.pool, &email).await
+    let user = create_test_user_db(&env.pool, &unique_email(prefix)).await;
+    env.track_user(user.id);
+    user
 }
 
 pub trait AuthenticatedRequest {
@@ -134,7 +184,11 @@ pub async fn create_test_user_db(pool: &Pool, email: &str) -> TestUser {
 
     let token = create_test_token(user.id, &user.email);
 
-    TestUser { id: user.id, token }
+    TestUser {
+        id: user.id,
+        token,
+        email: user.email,
+    }
 }
 
 pub async fn create_test_vehicle_db(
