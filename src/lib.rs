@@ -1,5 +1,6 @@
 pub mod app;
 pub mod auth;
+// token change: exercises CI caching (no functional impact)
 pub mod config;
 pub mod db;
 pub mod error;
