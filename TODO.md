@@ -4,12 +4,6 @@ Suspicious behaviours found while characterising the API/route surface with inte
 tests. These are pinned by tests (where practical) and should be reviewed during the
 upcoming refactor.
 
-## Auth / OAuth
-
-- `is_dev_auth_bypass_allowed` checks only the `DEV_AUTH_EMAIL` env var and ignores the
-  request headers/host, so when the `dev` feature is built with the var set, any request
-  is authenticated as user id 1. See `src/auth.rs:128-137`.
-
 ## Vehicles
 
 - `DELETE /vehicles/htmx/{id}` returns `200` with an empty body for both non-owned and

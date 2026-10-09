@@ -188,9 +188,12 @@ async fn test_google_callback_sets_both_cookies_when_oauth_succeeds() {
         .mount(&mock_server)
         .await;
 
-    let env = common::create_test_env_with_oauth(
-        deesl::oauth_handlers::OAuthConfig::test_config_with_base_url(&mock_server.uri()),
-    )
+    let env = common::create_test_env_with(common::TestEnvOptions {
+        oauth: Some(
+            deesl::oauth_handlers::OAuthConfig::test_config_with_base_url(&mock_server.uri()),
+        ),
+        ..Default::default()
+    })
     .await;
 
     let login_response = env.server.get("/auth/google").await;

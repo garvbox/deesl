@@ -27,6 +27,7 @@ pub struct Claims {
 pub struct AuthConfig {
     pub secret: String,
     pub expiration_hours: i64,
+    pub dev_user: Option<AuthUser>,
 }
 
 impl AuthConfig {
@@ -34,6 +35,16 @@ impl AuthConfig {
         Self {
             secret: secret.to_string(),
             expiration_hours,
+            dev_user: None,
+        }
+    }
+
+    pub fn with_dev_user(user: AuthUser) -> Self {
+        let default = Self::default();
+        Self {
+            secret: default.secret,
+            expiration_hours: default.expiration_hours,
+            dev_user: Some(user),
         }
     }
 }
@@ -43,6 +54,7 @@ impl Default for AuthConfig {
         Self {
             secret: "dev-secret-change-in-production".to_string(),
             expiration_hours: 24 * 7,
+            dev_user: None,
         }
     }
 }
@@ -126,24 +138,13 @@ where
     }
 }
 
-pub fn is_dev_auth_bypass_allowed(_headers: &HeaderMap) -> Option<String> {
-    #[cfg(feature = "dev")]
-    {
-        std::env::var(DEV_AUTH_EMAIL_KEY).ok()
-    }
-    #[cfg(not(feature = "dev"))]
-    {
-        None
-    }
-}
-
 pub async fn extract_auth_user(
     headers: &HeaderMap,
     auth_config: &AuthConfig,
     pool: &Pool,
 ) -> Result<AuthUser, AppError> {
-    if let Some(email) = is_dev_auth_bypass_allowed(headers) {
-        return Ok(AuthUser { user_id: 1, email });
+    if let Some(dev_user) = &auth_config.dev_user {
+        return Ok(dev_user.clone());
     }
 
     let token = extract_cookie(headers, "auth_token")
@@ -184,6 +185,7 @@ mod tests {
         AuthConfig {
             secret: secret.to_string(),
             expiration_hours: 24 * 7,
+            dev_user: None,
         }
     }
 
