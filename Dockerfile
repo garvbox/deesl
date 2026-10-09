@@ -8,10 +8,10 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN cargo install cargo-chef
+RUN cargo install cargo-chef --version 0.1.78 --locked
 
 # Install diesel_cli before copying source so this layer stays cached across releases
-RUN cargo install diesel_cli --no-default-features --features postgres
+RUN cargo install diesel_cli --version 2.3.14 --no-default-features --features postgres --locked
 
 WORKDIR /app
 
