@@ -92,7 +92,7 @@ type(scope)!: description
 - **Release type** is derived from the commits:
   - breaking change → `major`
   - `feat` → `minor`
-  - `fix` → `patch`
+  - `fix` or `ci` → `patch`
   - anything else → no release
 
 A PR check enforces this format and labels each pull request with the resulting `release: <type>`. Version bumps are automated on merge, so do **not** manually commit "Bump version to X" changes.

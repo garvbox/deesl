@@ -41,6 +41,8 @@ COMMIT_RE = re.compile(
 
 BREAKING_RE = re.compile(r"BREAKING[ -]CHANGE:")
 
+PATCH_TYPES = {"fix", "ci"}
+
 LABEL_COLORS = {
     "major": "b60205",
     "minor": "0366d6",
@@ -64,7 +66,7 @@ def parse_commit(message):
 def release_type(messages):
     has_breaking = False
     has_feat = False
-    has_fix = False
+    has_patch = False
     for message in messages:
         parsed = parse_commit(message)
         if parsed is None:
@@ -73,13 +75,13 @@ def release_type(messages):
             has_breaking = True
         elif parsed["type"] == "feat":
             has_feat = True
-        elif parsed["type"] == "fix":
-            has_fix = True
+        elif parsed["type"] in PATCH_TYPES:
+            has_patch = True
     if has_breaking:
         return "major"
     if has_feat:
         return "minor"
-    if has_fix:
+    if has_patch:
         return "patch"
     return None
 
