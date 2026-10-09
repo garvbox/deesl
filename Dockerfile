@@ -1,6 +1,6 @@
 ###########################################
-# -- Backend Builder Stage --
-FROM rust:bookworm AS builder
+# -- Chef Base --
+FROM public.ecr.aws/docker/library/rust:bookworm AS chef
 
 RUN apt-get update && apt-get install -y \
     pkg-config \
@@ -8,25 +8,30 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+RUN cargo install cargo-chef
 
-COPY Cargo.toml Cargo.lock ./
-
-RUN mkdir -p src && echo "fn main() {}" > src/main.rs && echo "pub fn dummy() {}" > src/lib.rs
-
-# Build only dependencies - layer caching optimisation
-RUN cargo build --release
-
+# Install diesel_cli before copying source so this layer stays cached across releases
 RUN cargo install diesel_cli --no-default-features --features postgres
 
-COPY . .
-RUN touch src/main.rs src/lib.rs
+WORKDIR /app
 
+###########################################
+# -- Dependency Planner --
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+###########################################
+# -- Backend Builder --
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+COPY . .
 RUN cargo build --release
 
 ###########################################
 # -- App Stage --
-FROM debian:bookworm-slim
+FROM public.ecr.aws/docker/library/debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
