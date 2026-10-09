@@ -1,6 +1,12 @@
 name: CI
 
 on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - Cargo.toml
+      - Cargo.lock
   pull_request:
 
 jobs:
@@ -21,6 +27,8 @@ jobs:
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Check formatting
         run: cargo fmt -- --check
@@ -62,6 +70,8 @@ jobs:
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libpq-dev
