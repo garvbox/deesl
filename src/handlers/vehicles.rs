@@ -117,15 +117,20 @@ pub async fn htmx_delete_vehicle(
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = user.user_id;
 
-    conn.interact(move |conn| {
-        diesel::delete(
-            vehicles::table
-                .filter(vehicles::id.eq(id))
-                .filter(vehicles::owner_id.eq(user_id)),
-        )
-        .execute(conn)
-    })
-    .await??;
+    let deleted = conn
+        .interact(move |conn| {
+            diesel::delete(
+                vehicles::table
+                    .filter(vehicles::id.eq(id))
+                    .filter(vehicles::owner_id.eq(user_id)),
+            )
+            .execute(conn)
+        })
+        .await??;
 
-    Ok(Html(""))
+    if deleted == 0 {
+        Err(AppError::NotFound("Vehicle Not Found".to_string()))
+    } else {
+        Ok(Html(""))
+    }
 }

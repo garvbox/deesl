@@ -6,8 +6,6 @@ upcoming refactor.
 
 ## Vehicles
 
-- `DELETE /vehicles/htmx/{id}` returns `200` with an empty body for both non-owned and
-  non-existent vehicles; no `403`/`404`. See `src/handlers/vehicles.rs:113-131`.
 - `GET /vehicles/htmx/list` only lists owned vehicles, not vehicles shared with the user,
   even though shared users can create fuel entries. Inconsistent visibility.
   See `src/handlers/vehicles.rs:98-105`.

@@ -43,10 +43,10 @@ pub async fn check_vehicle_write_access(
                 .filter(vehicles_schema::id.eq(vehicle_id))
                 .first(conn)
                 .optional()?
-                .ok_or(diesel::result::Error::NotFound)?;
+                .ok_or(AppError::NotFound("Entry not found".to_string()))?;
 
             if vehicle.owner_id == user_id {
-                return Ok::<(bool, bool), diesel::result::Error>((true, true));
+                return Ok::<(bool, bool), AppError>((true, true));
             }
 
             let share = crate::schema::vehicle_shares::table
