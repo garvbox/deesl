@@ -13,7 +13,7 @@ use crate::auth::{AuthUser, AuthUserRedirect};
 use crate::db::DbConn;
 use crate::error::AppError;
 use crate::models::{NewVehicle, Vehicle};
-use crate::schema::vehicles;
+use crate::schema::{vehicle_shares, vehicles};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -98,8 +98,11 @@ pub async fn htmx_vehicles(
     let user_vehicles: Vec<Vehicle> = conn
         .interact(move |conn| {
             vehicles::table
+                .left_join(vehicle_shares::table)
                 .filter(vehicles::owner_id.eq(user_id))
+                .or_filter(vehicle_shares::shared_with_user_id.eq(user_id))
                 .order(vehicles::registration)
+                .select(Vehicle::as_select())
                 .load::<Vehicle>(conn)
         })
         .await??;
