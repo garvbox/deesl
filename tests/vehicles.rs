@@ -116,6 +116,30 @@ async fn test_htmx_vehicles_excludes_other_users_vehicles() {
 }
 
 #[tokio::test]
+async fn test_htmx_vehicles_list_gets_shared_vehicles() {
+    let env = common::create_test_env().await;
+    let user = common::create_test_user(&env, "list_owner").await;
+    let other = common::create_test_user(&env, "list_other").await;
+
+    common::create_test_vehicle_db(&env.pool, user.id, "Mine", "Car", "MINE-1").await;
+    let shared_vehicle_id =
+        common::create_test_vehicle_db(&env.pool, other.id, "Theirs", "Car", "THEIRS-0").await;
+    common::create_test_vehicle_share_db(&env.pool, shared_vehicle_id, user.id, "read").await;
+
+    common::create_test_vehicle_db(&env.pool, other.id, "Un-Shared", "Car", "THEIRS-1").await;
+
+    let response = env
+        .server
+        .get("/vehicles/htmx/list")
+        .with_auth(&user.token)
+        .await;
+
+    response.assert_status_ok();
+    assert!(response.text().contains("MINE-1"));
+    assert!(response.text().contains("THEIRS-0"));
+}
+
+#[tokio::test]
 async fn test_htmx_delete_vehicle() {
     let env = common::create_test_env().await;
     let user = common::create_test_user(&env, "delete_test").await;

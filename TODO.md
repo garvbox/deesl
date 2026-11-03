@@ -4,12 +4,6 @@ Suspicious behaviours found while characterising the API/route surface with inte
 tests. These are pinned by tests (where practical) and should be reviewed during the
 upcoming refactor.
 
-## Vehicles
-
-- `GET /vehicles/htmx/list` only lists owned vehicles, not vehicles shared with the user,
-  even though shared users can create fuel entries. Inconsistent visibility.
-  See `src/handlers/vehicles.rs:98-105`.
-
 ## Fuel entries
 
 - `POST /fuel-entries` takes `station_id: i32` (required) and never verifies the station
